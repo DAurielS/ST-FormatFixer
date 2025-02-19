@@ -1,5 +1,5 @@
-import { extension_settings, getContext, loadExtensionSettings } from "../../../extensions.js";
-import { SlashCommandParser, SlashCommand, SlashCommandArgument, ARGUMENT_TYPE } from "../../slash-commands.js";
+import { extension_settings, getContext } from "../../../extensions.js";
+import { registerSlashCommand } from "../../../slash-commands.js";
 
 // Extension name
 const extensionName = "ST-FormatFixer";
@@ -28,6 +28,10 @@ const TEST_CASES = {
  * Handles text formatting with proper quote, narrative, and emphasis processing
  */
 class TextProcessor {
+    constructor() {
+        this.debugLog = [];
+    }
+
     /**
      * Process text through all formatting stages
      */
@@ -56,10 +60,15 @@ class TextProcessor {
      * Removes asterisks that directly wrap quotes
      */
     processQuotes(text) {
-        const parts = this.splitOnQuotes(text);
+        // First handle directly wrapped quotes
+        text = text.replace(/\*([""].*?[""])\*/g, '$1');
+        
+        // Then handle any remaining quotes with emphasis
+        const parts = this.splitBetweenQuotes(text);
         return parts.map(part => {
-            if (this.isDirectlyWrappedQuote(part)) {
-                return part.replace(/^\*(".*?")\*$/, '$1');
+            if (this.isQuote(part)) {
+                // Remove any asterisks directly touching quotes
+                return part.replace(/\*?([""].*?[""])\*?/g, '$1');
             }
             return part;
         }).join('');
@@ -179,40 +188,64 @@ class TextProcessor {
 // Initialize processor
 const processor = new TextProcessor();
 
-// Register slash command using the new method
-SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'format',
-    description: 'Format text with proper emphasis and quotes',
-    aliases: ['fix-format'],
-    examples: [
-        '/format *"Hello"* she said',
-        '/format text="*The cat was *very* cute*"'
-    ],
-    returns: 'the formatted text with proper emphasis and quotes',
-    args: [
-        SlashCommandArgument.fromProps({
-            name: 'text',
-            description: 'The text to format',
-            type: ARGUMENT_TYPE.STRING,
-            required: true
-        })
-    ],
-    callback: (args) => {
-        const text = args.text || args.toString();
-        if (!text) return "Please provide text to format";
-        return processor.processText(text);
+// Register slash command
+registerSlashCommand("format", (_, text) => {
+    if (!text) {
+        return "Please provide text to format";
     }
-}));
+    try {
+        const formattedText = processor.processText(text);
+        if (formattedText === text) {
+            return "No formatting changes needed";
+        }
+        return formattedText;
+    } catch (error) {
+        console.error('Format command error:', error);
+        return `Error formatting text: ${error.message}`;
+    }
+}, ["fmt"], "Format text with proper emphasis and quotes. Usage: /format your text here");
 
 // Initialize extension
 jQuery(async () => {
     try {
-        // Load settings HTML
-    const settingsHtml = await $.get(`${extensionName}/settings.html`);
-        $("#extensions_settings2").append(settingsHtml);
+        // Add settings panel
+        const settingsHtml = `
+            <div class="format-fixer-settings">
+                <div class="inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header">
+                        <b>Format Fixer</b>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    </div>
+                    <div class="inline-drawer-content">
+                        <div class="format_fixer_block">
+                            <label for="format_fixer_test_case">Test Case:</label>
+                            <select id="format_fixer_test_case">
+                                <option value="basic">Basic Quote and Narrative</option>
+                                <option value="nested">Nested Emphasis</option>
+                                <option value="complex">Complex Mixed Formatting</option>
+                            </select>
+                        </div>
 
+                        <div class="format_fixer_block">
+                            <label for="format_fixer_test_input">Input Text:</label>
+                            <textarea id="format_fixer_test_input" class="text_pole textarea_compact" rows="3"></textarea>
+                        </div>
+
+                        <div class="format_fixer_block">
+                            <label for="format_fixer_test_output">Test Results:</label>
+                            <textarea id="format_fixer_test_output" class="text_pole textarea_compact" rows="3" readonly></textarea>
+                        </div>
+
+                        <div class="format_fixer_block">
+                            <input id="format_fixer_test" class="menu_button" type="button" value="Run Test" />
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        $('#extensions_settings2').append(settingsHtml);
+        
         // Add format button to message input area
-        const buttonHtml = '<button id="format_message" class="menu_button"><i class="fa-solid fa-wand-magic-sparkles"></i></button>';
+        const buttonHtml = '<button id="format_message" class="menu_button" title="Format message"><i class="fa-solid fa-wand-magic-sparkles"></i></button>';
         $("#send_but_sheld").prepend(buttonHtml);
 
         // Handle test case selection

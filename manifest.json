@@ -8,5 +8,7 @@
     "author": "MonGauss",
     "version": "1.0.0",
     "homePage": "https://github.com/DAurielS/ST-FormatFixer",
-    "auto_update": true
+    "auto_update": true,
+    "extension_version": 1,
+    "settingsPath": "settings.html"
 }
