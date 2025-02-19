@@ -1,0 +1,33 @@
+<div class="format-fixer-settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>Format Fixer</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <div class="format-fixer-block">
+                <p>Format text with proper emphasis and quotes. Use the format button in the message input area or the /format command.</p>
+            </div>
+
+            <div class="format-fixer-block">
+                <h4>Test Cases</h4>
+                <select id="format_fixer_test_case" class="text_pole">
+                    <option value="basic">Basic Quote and Narrative</option>
+                    <option value="nested">Nested Emphasis</option>
+                    <option value="complex">Complex Mixed Formatting</option>
+                </select>
+                <textarea id="format_fixer_test_input" class="text_pole" rows="3" readonly></textarea>
+                <div class="format-fixer_block flex-container">
+                    <input id="format_fixer_test" class="menu_button" type="button" value="Run Test" />
+                </div>
+            </div>
+
+            <div class="format-fixer-block">
+                <h4>Test Result</h4>
+                <textarea id="format_fixer_test_output" class="text_pole" rows="3" readonly></textarea>
+            </div>
+
+            <hr class="sysHR" />
+        </div>
+    </div>
+</div>

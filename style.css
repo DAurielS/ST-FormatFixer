@@ -1,0 +1,59 @@
+/* Format Fixer Styles */
+
+.format-fixer-settings {
+    padding: 10px;
+}
+
+.format-fixer-block {
+    margin-bottom: 15px;
+}
+
+.format-fixer-block h4 {
+    margin: 5px 0;
+    color: var(--grey70);
+}
+
+.format-fixer-block p {
+    margin: 5px 0;
+    color: var(--grey70);
+    font-size: 0.9em;
+}
+
+.format-fixer-block select {
+    width: 100%;
+    margin: 5px 0;
+    padding: 5px;
+    background-color: var(--black30);
+    border: 1px solid var(--black50);
+    color: var(--grey80);
+}
+
+.format-fixer-block textarea {
+    width: 100%;
+    margin: 5px 0;
+    padding: 5px;
+    background-color: var(--black30);
+    border: 1px solid var(--black50);
+    color: var(--grey80);
+    font-family: monospace;
+    resize: vertical;
+}
+
+/* Format button in message area */
+#format_message {
+    padding: 5px 10px;
+    margin-right: 5px;
+    background-color: var(--black30);
+    border: 1px solid var(--black50);
+    color: var(--grey80);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#format_message:hover {
+    background-color: var(--black50);
+}
+
+#format_message i {
+    margin-right: 0;
+}

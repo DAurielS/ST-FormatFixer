@@ -1,0 +1,12 @@
+{
+    "display_name": "Format Fixer",
+    "loading_order": 10,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "MonGauss",
+    "version": "1.0.0",
+    "homePage": "https://github.com/DAurielS/ST-FormatFixer",
+    "auto_update": true
+}
