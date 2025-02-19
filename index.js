@@ -1,8 +1,8 @@
-import { extension_settings, getContext } from "../../../extensions.js";
-import { registerSlashCommand } from "../../slash-commands.js";
+import { extension_settings, getContext, loadExtensionSettings } from "../../../extensions.js";
+import { SlashCommandParser, SlashCommand, SlashCommandArgument, ARGUMENT_TYPE } from "../../slash-commands.js";
 
 // Extension name
-const extensionName = "format-fixer";
+const extensionName = "ST-FormatFixer";
 
 // Test cases
 const TEST_CASES = {
@@ -179,56 +179,79 @@ class TextProcessor {
 // Initialize processor
 const processor = new TextProcessor();
 
-// Register slash command
-registerSlashCommand("format", (_, text) => {
-    if (!text) return "Please provide text to format";
-    return processor.processText(text);
-}, [], "Format text with proper emphasis and quotes");
+// Register slash command using the new method
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'format',
+    description: 'Format text with proper emphasis and quotes',
+    aliases: ['fix-format'],
+    examples: [
+        '/format *"Hello"* she said',
+        '/format text="*The cat was *very* cute*"'
+    ],
+    returns: 'the formatted text with proper emphasis and quotes',
+    args: [
+        SlashCommandArgument.fromProps({
+            name: 'text',
+            description: 'The text to format',
+            type: ARGUMENT_TYPE.STRING,
+            required: true
+        })
+    ],
+    callback: (args) => {
+        const text = args.text || args.toString();
+        if (!text) return "Please provide text to format";
+        return processor.processText(text);
+    }
+}));
 
 // Initialize extension
 jQuery(async () => {
-    // Load settings HTML
+    try {
+        // Load settings HTML
     const settingsHtml = await $.get(`${extensionName}/settings.html`);
-    $("#extensions_settings2").append(settingsHtml);
+        $("#extensions_settings2").append(settingsHtml);
 
-    // Add format button to message input area
-    const buttonHtml = '<button id="format_message" class="menu_button"><i class="fa-solid fa-wand-magic-sparkles"></i></button>';
-    $("#send_but_sheld").prepend(buttonHtml);
+        // Add format button to message input area
+        const buttonHtml = '<button id="format_message" class="menu_button"><i class="fa-solid fa-wand-magic-sparkles"></i></button>';
+        $("#send_but_sheld").prepend(buttonHtml);
 
-    // Handle test case selection
-    $("#format_fixer_test_case").on("change", (e) => {
-        const testCase = TEST_CASES[e.target.value];
-        if (testCase) {
-            $("#format_fixer_test_input").val(testCase.input);
-            $("#format_fixer_test_output").val('');
-        }
-    });
+        // Handle test case selection
+        $("#format_fixer_test_case").on("change", (e) => {
+            const testCase = TEST_CASES[e.target.value];
+            if (testCase) {
+                $("#format_fixer_test_input").val(testCase.input);
+                $("#format_fixer_test_output").val('');
+            }
+        });
 
-    // Handle test button click
-    $("#format_fixer_test").on("click", () => {
-        const testCase = TEST_CASES[$("#format_fixer_test_case").val()];
-        if (testCase) {
-            const result = processor.processText(testCase.input);
-            const passed = result === testCase.expected;
-            
-            $("#format_fixer_test_output").val(
-                `Result: ${result}\n` +
-                `Expected: ${testCase.expected}\n` +
-                `Status: ${passed ? "✓ PASSED" : "✗ FAILED"}`
-            );
-        }
-    });
+        // Handle test button click
+        $("#format_fixer_test").on("click", () => {
+            const testCase = TEST_CASES[$("#format_fixer_test_case").val()];
+            if (testCase) {
+                const result = processor.processText(testCase.input);
+                const passed = result === testCase.expected;
+                
+                $("#format_fixer_test_output").val(
+                    `Result: ${result}\n` +
+                    `Expected: ${testCase.expected}\n` +
+                    `Status: ${passed ? "✓ PASSED" : "✗ FAILED"}`
+                );
+            }
+        });
 
-    // Handle format button click
-    $("#format_message").on("click", () => {
-        const messageInput = $("#send_textarea");
-        const currentText = messageInput.val();
-        if (currentText) {
-            const formattedText = processor.processText(currentText);
-            messageInput.val(formattedText);
-        }
-    });
+        // Handle format button click
+        $("#format_message").on("click", () => {
+            const messageInput = $("#send_textarea");
+            const currentText = messageInput.val();
+            if (currentText) {
+                const formattedText = processor.processText(currentText);
+                messageInput.val(formattedText);
+            }
+        });
 
-    // Initialize test case dropdown
-    $("#format_fixer_test_case").trigger("change");
+        // Initialize test case dropdown
+        $("#format_fixer_test_case").trigger("change");
+    } catch (error) {
+        console.error('Format Fixer initialization error:', error);
+    }
 });
