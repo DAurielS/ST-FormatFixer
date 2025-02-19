@@ -14,50 +14,53 @@ const TEST_CASES = {
     nested: {
         name: "Nested Emphasis",
         input: '*The cat was *very* cute* "He was *quite* happy"',
-        expected: '*The cat was **very** cute* "He was *quite* happy"'
+        expected: '*The cat was **very** cute* "He was **quite** happy"'
     },
     complex: {
         name: "Complex Mixed Formatting",
         input: '*"Where did they go?"* The cat wondered, watching the *mysterious* figure disappear into the *dark and *spooky* night.*',
         expected: '"Where did they go?" *The cat wondered, watching the **mysterious** figure disappear into the *dark and **spooky** night.*'
+    },
+    narrative_quote: {
+        name: "Quote Within Narrative",
+        input: '*The man needed no "help" to fetch his gun*',
+        expected: '*The man needed no "help" to fetch his gun*'
+    },
+    ultimate: {
+        name: "Ultimate Test Case",
+        input: '*"Where did I learn those words?"* Fwench Fwy repeats, one paw tapping their chin thoughtfully. *"Hmm, let\'s see... a little bit from here, a little bit from there. You know, being an ancient, all-powerful wish dragon has its perks! I can peek into any reality, any time period, any... *website*."* They giggle, the sound like wind chimes mixed with a dial-up modem.',
+        expected: '"Where did I learn those words?" *Fwench Fwy repeats, one paw tapping their chin thoughtfully.* "Hmm, let\'s see... a little bit from here, a little bit from there. You know, being an ancient, all-powerful wish dragon has its perks! I can peek into any reality, any time period, any... **website**." *They giggle, the sound like wind chimes mixed with a dial-up modem.*'
     }
 };
 
-/**
- * Format Fixer Text Processor
- * Handles text formatting with proper quote, narrative, and emphasis processing
- */
 class TextProcessor {
     constructor() {
         this.debugLog = [];
     }
 
-    /**
-     * Process text through all formatting stages
-     */
     processText(text) {
         try {
             let result = text;
             
-            // Stage 1: Process quotes
+            // Stage 1: Process quotes (keep the working version)
             result = this.processQuotes(result);
             
-            // Stage 2: Process narrative sections
-            result = this.processNarrative(result);
-            
-            // Stage 3: Process nested emphasis
+            // Stage 2: Convert single-word italics to bold
             result = this.processNestedEmphasis(result);
+            
+            // Stage 3: Process narrative sections
+            result = this.processNarrative(result);
             
             return result;
         } catch (error) {
             console.error('Format Fixer error:', error);
-            return text; // Return original text on error
+            return text;
         }
     }
 
     /**
      * Stage 1: Process quotes
-     * Removes asterisks that directly wrap quotes
+     * Only removes asterisks that directly wrap quotes
      */
     processQuotes(text) {
         let result = text;
@@ -65,130 +68,61 @@ class TextProcessor {
         // Only remove emphasis that directly wraps entire quotes
         result = result.replace(/\*([""][^""]*[""])\*/g, '$1');
         
-        // Don't remove emphasis from within quotes
         return result;
     }
 
     /**
-     * Stage 2: Process narrative sections
-     * Adds italics to unformatted narrative sections
+     * Stage 2: Process nested emphasis
+     * Converts single-word italics to bold
+     */
+    processNestedEmphasis(text) {
+        // Convert single-word italics to bold
+        return text.replace(/\*([^\s*]+)\*/g, '**$1**');
+    }
+
+    /**
+     * Stage 3: Process narrative sections
+     * Adds italics to narrative text between quotes
      */
     processNarrative(text) {
-        // Split text into sections by quotes
-        const parts = this.splitBetweenQuotes(text);
+        const sections = this.splitBetweenQuotes(text);
         let result = '';
         
-        // Keep track of whether we're in an emphasized section
-        let inEmphasis = false;
-        
-        for (let i = 0; i < parts.length; i++) {
-            const part = parts[i];
-            if (!part) continue;
+        for (let i = 0; i < sections.length; i++) {
+            const section = sections[i];
+            // Prevent double spaces when joining sections
+            if (result && section.raw && result.endsWith(' ') && section.raw.startsWith(' ')) {
+                // Remove one of the spaces
+                result = result.slice(0, -1);
+            }
             
-            if (this.isQuote(part)) {
-                // Always close any open emphasis before a quote
-                if (inEmphasis) {
-                    result = result.trimEnd() + '*';
-                    inEmphasis = false;
-                }
-                result += part;
+            if (section.type === 'quote') {
+                // Add quotes as-is with original spacing
+                result += section.raw;
             } else {
                 // Handle narrative sections
-                const trimmed = part.trim();
-                if (trimmed.length > 0) {
-                    // Don't add emphasis if:
-                    // 1. Text already has emphasis markers
-                    // 2. We're continuing an emphasized section
-                    // 3. It's just whitespace
-                    if (!trimmed.includes('*') && !inEmphasis && !this.isItalicized(trimmed)) {
-                        result += (result && !result.endsWith(' ') ? ' ' : '') + '*';
-                        inEmphasis = true;
-                        result += trimmed;
-                    } else {
-                        result += part;
+                if (!this.isItalicized(section.text)) {
+                    // When adding start asterisk, also add space if needed
+                    if (!section.text.startsWith('*')) {
+                        if (result && !result.endsWith(' ')) result += ' ';
+                        result += '*';
+                    }
+                    
+                    result += section.text;
+                    
+                    // When adding end asterisk, also add space if needed
+                    if (!section.text.endsWith('*')) {
+                        result += '*';
+                        if (i < sections.length - 1 && !section.text.endsWith(' ')) result += ' ';
                     }
                 } else {
-                    // For whitespace sections
-                    if (inEmphasis) {
-                        result = result.trimEnd() + '*';
-                        inEmphasis = false;
-                    }
-                    result += part;
+                    // Already properly emphasized - preserve original spacing
+                    result += section.raw;
                 }
             }
-        }
-        
-        // Close any open emphasis at the end
-        if (inEmphasis) {
-            result = result.trimEnd() + '*';
         }
         
         return result.trim();
-    }
-
-    /**
-     * Stage 3: Process nested emphasis
-     * Converts nested italics to bold in narrative sections only
-     */
-    /**
-     * Find sections of text that have emphasis within emphasis
-     */
-    findInnerEmphasis(text) {
-        const sections = [];
-        let depth = 0;
-        let start = -1;
-        let outerStart = -1;
-
-        for (let i = 0; i < text.length; i++) {
-            if (text[i] === '*') {
-                if (depth === 0) {
-                    // Start of outer emphasis
-                    outerStart = i;
-                    depth++;
-                } else if (depth === 1) {
-                    if (text[i+1] === '*') {
-                        // Skip double asterisks
-                        i++;
-                        continue;
-                    }
-                    // Found inner emphasis start
-                    start = i;
-                    depth++;
-                } else if (depth === 2 && start !== -1) {
-                    // Found inner emphasis end
-                    if (outerStart !== -1) {
-                        sections.push([start, i]);
-                    }
-                    start = -1;
-                    depth--;
-                }
-            }
-        }
-        return sections;
-    }
-
-    /**
-     * Convert inner emphasis sections to bold
-     */
-    convertToBold(text, sections) {
-        let result = text;
-        // Process sections from end to start to avoid offset issues
-        for (let i = sections.length - 1; i >= 0; i--) {
-            const [start, end] = sections[i];
-            const innerText = text.slice(start + 1, end);
-            result = result.slice(0, start) + '**' + innerText + '**' + result.slice(end + 1);
-        }
-        return result;
-    }
-
-    /**
-     * Process nested emphasis in text
-     */
-    processNestedEmphasis(text) {
-        // First pass: Find inner emphasis sections
-        const sections = this.findInnerEmphasis(text);
-        // Second pass: Convert these sections to bold
-        return this.convertToBold(text, sections);
     }
 
     // Helper Functions
@@ -208,62 +142,76 @@ class TextProcessor {
     }
 
     /**
-     * Check if text has nested emphasis
-     */
-    hasNestedEmphasis(text) {
-        return /\*[^*]*\*[^*]+\*[^*]*\*/.test(text);
-    }
-
-    /**
-     * Split text between quotes while preserving quotes and spaces
+     * Split text between standalone quotes while preserving quotes and original spacing
      */
     splitBetweenQuotes(text) {
-        return text.split(/([""][^""]*[""])/g).filter(Boolean);
-    }
-
-    /**
-     * Check if text needs emphasis (not a quote, not already emphasized)
-     */
-    needsEmphasis(text) {
-        const trimmed = text.trim();
-        return trimmed.length > 0 && !this.isQuote(trimmed) && !this.isItalicized(trimmed);
-    }
-
-    /**
-     * Add proper spacing around text
-     */
-    addSpacing(text, needsLeftSpace, needsRightSpace) {
-        return (needsLeftSpace ? ' ' : '') + text + (needsRightSpace ? ' ' : '');
-    }
-
-    /**
-     * Extract basic sections that are wrapped in emphasis marks
-     */
-    getEmphasisSections(text) {
-        const sections = [];
-        let current = '';
+        // Split only on quotes that aren't inside asterisks
+        let sections = [];
+        let buffer = '';
         let inEmphasis = false;
         
         for (let i = 0; i < text.length; i++) {
-            if (text[i] === '*' && text[i+1] !== '*' && (!inEmphasis || i === text.length-1 || text[i+1] !== '*')) {
-                // Only process single asterisks, not double
-                if (!inEmphasis) {
-                    if (current) sections.push({type: 'plain', text: current});
-                    current = '*';
-                    inEmphasis = true;
-                } else {
-                    current += '*';
-                    sections.push({type: 'emphasis', text: current});
-                    current = '';
-                    inEmphasis = false;
+            const char = text[i];
+            
+            if (char === '*') {
+                inEmphasis = !inEmphasis;
+                buffer += char;
+            }
+            else if (char === '"' && !inEmphasis) {
+                // Found a quote outside emphasis
+                if (buffer) {
+                    // Look ahead for spaces that should belong to this section
+                    while (i + 1 < text.length && text[i + 1] === ' ') {
+                        buffer += ' ';
+                        i++;
+                    }
+                    sections.push({
+                        raw: buffer,
+                        text: buffer.trim(),
+                        type: 'narrative'
+                    });
                 }
-            } else {
-                current += text[i];
+                buffer = '';
+                
+                // Check for a single space before the quote
+                let leadingSpace = (i > 0 && text[i - 1] === ' ') ? ' ' : '';
+                
+                // Add quote with optional leading space
+                let quoteBuffer = leadingSpace + char;
+                
+                // Capture the quote content
+                i++;
+                while (i < text.length && text[i] !== '"') {
+                    quoteBuffer += text[i];
+                    i++;
+                }
+                if (i < text.length) quoteBuffer += text[i];
+                
+                // Check for a single trailing space
+                if (i + 1 < text.length && text[i + 1] === ' ') {
+                    quoteBuffer += ' ';
+                    i++; // Move past the space
+                }
+                
+                sections.push({
+                    raw: quoteBuffer,
+                    text: quoteBuffer.trim(),
+                    type: 'quote'
+                });
+            }
+            else {
+                buffer += char;
             }
         }
         
-        if (current) sections.push({type: inEmphasis ? 'emphasis' : 'plain', text: current});
-        return sections;
+        if (buffer) {
+            sections.push({
+                raw: buffer,
+                text: buffer.trim(),
+                type: 'narrative'
+            });
+        }
+        return sections.filter(s => s.text);
     }
 }
 
@@ -305,6 +253,8 @@ jQuery(async () => {
                                 <option value="basic">Basic Quote and Narrative</option>
                                 <option value="nested">Nested Emphasis</option>
                                 <option value="complex">Complex Mixed Formatting</option>
+                                <option value="narrative_quote">Quote Within Narrative</option>
+                                <option value="ultimate">Ultimate Test Case</option>
                             </select>
                         </div>
 
