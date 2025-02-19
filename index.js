@@ -67,7 +67,7 @@ class TextProcessor {
 
         // Find quotes and their context
         let quoteMatch;
-        const quoteRegex = /([""][^""]*[""])/g;
+        const quoteRegex = /("[^"]*")/g;
         while ((quoteMatch = quoteRegex.exec(normalized)) !== null) {
             const quote = quoteMatch[0];
             const normalizedStart = quoteMatch.index;
@@ -130,29 +130,48 @@ class TextProcessor {
         mapping.quotes.forEach(quote => {
             // Add text before quote
             if (quote.normalizedStart > lastIndex) {
-                sections.push({
-                    type: 'text',
-                    content: result.slice(lastIndex, quote.normalizedStart).trim()
-                });
+                const preText = result.slice(lastIndex, quote.normalizedStart).trim();
+                if (preText) {
+                    sections.push({
+                        type: 'text',
+                        content: preText
+                    });
+                }
             }
 
-            // Add quote with proper spacing
-            sections.push({
-                type: 'quote',
-                content: quote.text,
-                needsLeftSpace: lastIndex > 0,
-                needsRightSpace: quote.normalizedEnd < result.length
-            });
+            // Determine if this quote was directly wrapped in emphasis or part of narrative
+            if (quote.wasDirectlyEmphasized) {
+                // Quote was directly wrapped in asterisks - remove emphasis
+                sections.push({
+                    type: 'quote',
+                    content: quote.text,
+                    keepEmphasis: false,
+                    needsLeftSpace: lastIndex > 0,
+                    needsRightSpace: quote.normalizedEnd < result.length
+                });
+            } else {
+                // Quote might be part of narrative - preserve any emphasis
+                sections.push({
+                    type: 'quote',
+                    content: quote.text,
+                    keepEmphasis: quote.wasInEmphasis,
+                    needsLeftSpace: lastIndex > 0,
+                    needsRightSpace: quote.normalizedEnd < result.length
+                });
+            }
 
             lastIndex = quote.normalizedEnd;
         });
 
         // Add remaining text
         if (lastIndex < result.length) {
-            sections.push({
-                type: 'text',
-                content: result.slice(lastIndex).trim()
-            });
+            const postText = result.slice(lastIndex).trim();
+            if (postText) {
+                sections.push({
+                    type: 'text',
+                    content: postText
+                });
+            }
         }
 
         // Join sections with proper spacing
@@ -160,7 +179,8 @@ class TextProcessor {
             if (section.type === 'quote') {
                 const spaceLeft = section.needsLeftSpace ? ' ' : '';
                 const spaceRight = section.needsRightSpace ? ' ' : '';
-                return `${spaceLeft}${section.content}${spaceRight}`;
+                const content = section.keepEmphasis ? `*${section.content}*` : section.content;
+                return `${spaceLeft}${content}${spaceRight}`;
             }
             return section.content;
         }).join('').trim();
@@ -222,31 +242,49 @@ class TextProcessor {
     }
 
     wasNarrativeEmphasized(section, mapping) {
+        const sectionText = section.text;
+        // Check if this exact section or any part containing it was emphasized in original
         return mapping.emphasis.some(emphasis => {
             const normalizedEmphasis = this.normalizeText(emphasis.text);
-            return section.text.includes(normalizedEmphasis) ||
-                   normalizedEmphasis.includes(section.text);
+            // Check for exact match first
+            if (normalizedEmphasis === sectionText) return true;
+            // Check if this section was part of a larger emphasized block
+            if (normalizedEmphasis.includes(sectionText)) {
+                // Make sure it wasn't just part of a word
+                const start = normalizedEmphasis.indexOf(sectionText);
+                const end = start + sectionText.length;
+                const beforeChar = start > 0 ? normalizedEmphasis[start - 1] : ' ';
+                const afterChar = end < normalizedEmphasis.length ? normalizedEmphasis[end] : ' ';
+                return beforeChar === ' ' || afterChar === ' ';
+            }
+            return false;
         });
     }
 
     recoverBoldText(text, original, mapping) {
         let result = text;
         
-        // Sort emphasis sections by length (longest first) to handle nested properly
-        const sortedEmphasis = [...mapping.emphasis]
-            .filter(e => e.wasNested)
-            .sort((a, b) => b.text.length - a.text.length);
+        // First, find all emphasized sections that contain nested emphasis
+        const nestedEmphasis = mapping.emphasis.filter(section => {
+            // Check if this section contains an emphasized word
+            return original.slice(section.originalStart, section.originalEnd)
+                   .match(/\*[^*]+\*/);
+        });
 
-        for (const section of sortedEmphasis) {
-            const normalizedContent = this.normalizeText(section.text);
-            const position = result.indexOf(normalizedContent);
-            if (position !== -1) {
-                // Check if this content should be bold
-                const shouldBeBold = this.shouldBeBold(section, original);
-                if (shouldBeBold) {
-                    result = result.slice(0, position) + 
-                            '**' + normalizedContent + '**' + 
-                            result.slice(position + normalizedContent.length);
+        // Process each nested section
+        for (const section of nestedEmphasis) {
+            const sectionText = original.slice(section.originalStart, section.originalEnd);
+            // Find all inner emphasized words
+            const innerMatch = sectionText.match(/\*([^*]+)\*/g);
+            if (innerMatch) {
+                for (const match of innerMatch) {
+                    const innerText = match.replace(/\*/g, '');
+                    const normalizedText = this.normalizeText(innerText);
+                    // Replace in our result, but only if it's not part of a larger word
+                    result = result.replace(
+                        new RegExp(`(\\s|^)${this.escapeRegExp(normalizedText)}(\\s|$)`, 'g'),
+                        `$1**${normalizedText}**$2`
+                    );
                 }
             }
         }
@@ -254,22 +292,8 @@ class TextProcessor {
         return result;
     }
 
-    shouldBeBold(section, original) {
-        // Check if this section was nested emphasis in original
-        const content = section.text;
-        const start = section.originalStart;
-        const end = section.originalEnd;
-        
-        // Count asterisks before this section
-        let asterisksBefore = 0;
-        for (let i = 0; i < start; i++) {
-            if (original[i] === '*' && original[i+1] !== '*') {
-                asterisksBefore++;
-            }
-        }
-        
-        // If we're inside another emphasis, this should be bold
-        return asterisksBefore % 2 === 1;
+    escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     fixSpacing(text) {
