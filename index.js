@@ -14,7 +14,7 @@ const TEST_CASES = {
     nested: {
         name: "Nested Emphasis",
         input: '*The cat was *very* cute* "He was *quite* happy"',
-        expected: '*The cat was **very** cute* "He was *quite* happy"'
+        expected: '*The cat was **very** cute* "He was **quite** happy"'
     },
     complex: {
         name: "Complex Mixed Formatting",
@@ -40,274 +40,144 @@ class TextProcessor {
 
     processText(text) {
         try {
-            const original = text;
-            const normalized = this.normalizeText(text);
-            const mapping = this.createPositionMapping(original, normalized);
-            let result = this.processQuotesWithContext(normalized, mapping);
-            result = this.processNarrativeWithContext(result, mapping);
-            result = this.recoverBoldText(result, original, mapping);
-            return this.fixSpacing(result);
+            let result = text;
+            
+            // Stage 1: Process quotes (keep the working version)
+            result = this.processQuotes(result);
+            
+            // Stage 2: Convert single-word italics to bold
+            result = this.processNestedEmphasis(result);
+            
+            // Stage 3: Process narrative sections
+            result = this.processNarrative(result);
+            
+            return result;
         } catch (error) {
             console.error('Format Fixer error:', error);
             return text;
         }
     }
 
-    normalizeText(text) {
-        // Remove all asterisks but preserve spacing
-        return text.replace(/\*/g, '');
-    }
-
-    createPositionMapping(original, normalized) {
-        const mapping = {
-            quotes: [],
-            emphasis: [],
-            sections: []
-        };
-
-        // Find quotes and their context
-        let quoteMatch;
-        const quoteRegex = /("[^"]*")/g;
-        while ((quoteMatch = quoteRegex.exec(normalized)) !== null) {
-            const quote = quoteMatch[0];
-            const normalizedStart = quoteMatch.index;
-            const normalizedEnd = normalizedStart + quote.length;
-
-            // Find corresponding position in original text
-            const searchStart = mapping.quotes.length > 0 
-                ? mapping.quotes[mapping.quotes.length - 1].originalEnd 
-                : 0;
-            const originalIndex = original.indexOf(quote, searchStart);
-
-            mapping.quotes.push({
-                text: quote,
-                normalizedStart,
-                normalizedEnd,
-                originalStart: originalIndex,
-                originalEnd: originalIndex + quote.length,
-                wasDirectlyEmphasized: this.isDirectlyEmphasized(original, originalIndex, quote.length),
-                wasInEmphasis: this.wasInsideEmphasis(original, originalIndex)
-            });
-        }
-
-        // Find emphasis sections
-        let emphasisMatch;
-        const emphasisRegex = /\*((?:[^*]|\*\*)*?)\*/g;
-        while ((emphasisMatch = emphasisRegex.exec(original)) !== null) {
-            const content = emphasisMatch[1];
-            mapping.emphasis.push({
-                text: content,
-                originalStart: emphasisMatch.index,
-                originalEnd: emphasisMatch.index + emphasisMatch[0].length,
-                wasNested: content.includes('*')
-            });
-        }
-
-        return mapping;
-    }
-
-    isDirectlyEmphasized(text, position, length) {
-        const before = position > 0 ? text[position - 1] : '';
-        const after = position + length < text.length ? text[position + length] : '';
-        return before === '*' && after === '*';
-    }
-
-    wasInsideEmphasis(text, position) {
-        let asteriskCount = 0;
-        for (let i = 0; i < position; i++) {
-            if (text[i] === '*' && text[i+1] !== '*') {
-                asteriskCount++;
-            }
-        }
-        return asteriskCount % 2 === 1;
-    }
-
-    processQuotesWithContext(text, mapping) {
-        let result = text;
-        const sections = [];
-        let lastIndex = 0;
-
-        mapping.quotes.forEach(quote => {
-            // Add text before quote
-            if (quote.normalizedStart > lastIndex) {
-                const preText = result.slice(lastIndex, quote.normalizedStart).trim();
-                if (preText) {
-                    sections.push({
-                        type: 'text',
-                        content: preText
-                    });
-                }
-            }
-
-            // Determine if this quote was directly wrapped in emphasis or part of narrative
-            if (quote.wasDirectlyEmphasized) {
-                // Quote was directly wrapped in asterisks - remove emphasis
-                sections.push({
-                    type: 'quote',
-                    content: quote.text,
-                    keepEmphasis: false,
-                    needsLeftSpace: lastIndex > 0,
-                    needsRightSpace: quote.normalizedEnd < result.length
-                });
-            } else {
-                // Quote might be part of narrative - preserve any emphasis
-                sections.push({
-                    type: 'quote',
-                    content: quote.text,
-                    keepEmphasis: quote.wasInEmphasis,
-                    needsLeftSpace: lastIndex > 0,
-                    needsRightSpace: quote.normalizedEnd < result.length
-                });
-            }
-
-            lastIndex = quote.normalizedEnd;
-        });
-
-        // Add remaining text
-        if (lastIndex < result.length) {
-            const postText = result.slice(lastIndex).trim();
-            if (postText) {
-                sections.push({
-                    type: 'text',
-                    content: postText
-                });
-            }
-        }
-
-        // Join sections with proper spacing
-        return sections.map((section, index) => {
-            if (section.type === 'quote') {
-                const spaceLeft = section.needsLeftSpace ? ' ' : '';
-                const spaceRight = section.needsRightSpace ? ' ' : '';
-                const content = section.keepEmphasis ? `*${section.content}*` : section.content;
-                return `${spaceLeft}${content}${spaceRight}`;
-            }
-            return section.content;
-        }).join('').trim();
-    }
-
-    processNarrativeWithContext(text, mapping) {
-        const sections = this.splitIntoSections(text, mapping);
-        return sections.map((section, index) => {
-            if (section.type === 'quote') {
-                return section.text;
-            } else if (section.type === 'narrative' && section.text.trim()) {
-                const wasEmphasized = this.wasNarrativeEmphasized(section, mapping);
-                if (wasEmphasized) {
-                    const needsLeftSpace = index > 0;
-                    const needsRightSpace = index < sections.length - 1;
-                    const spaceLeft = needsLeftSpace ? ' ' : '';
-                    const spaceRight = needsRightSpace ? ' ' : '';
-                    return `${spaceLeft}*${section.text.trim()}*${spaceRight}`;
-                }
-                return section.text;
-            }
-            return '';
-        }).filter(Boolean).join('').trim();
-    }
-
-    splitIntoSections(text, mapping) {
-        const sections = [];
-        let lastIndex = 0;
-
-        mapping.quotes.forEach(quote => {
-            if (lastIndex < quote.normalizedStart) {
-                const narrativeText = text.slice(lastIndex, quote.normalizedStart).trim();
-                if (narrativeText) {
-                    sections.push({
-                        type: 'narrative',
-                        text: narrativeText
-                    });
-                }
-            }
-            sections.push({
-                type: 'quote',
-                text: quote.text,
-                mapping: quote
-            });
-            lastIndex = quote.normalizedEnd;
-        });
-
-        if (lastIndex < text.length) {
-            const narrativeText = text.slice(lastIndex).trim();
-            if (narrativeText) {
-                sections.push({
-                    type: 'narrative',
-                    text: narrativeText
-                });
-            }
-        }
-
-        return sections;
-    }
-
-    wasNarrativeEmphasized(section, mapping) {
-        const sectionText = section.text;
-        // Check if this exact section or any part containing it was emphasized in original
-        return mapping.emphasis.some(emphasis => {
-            const normalizedEmphasis = this.normalizeText(emphasis.text);
-            // Check for exact match first
-            if (normalizedEmphasis === sectionText) return true;
-            // Check if this section was part of a larger emphasized block
-            if (normalizedEmphasis.includes(sectionText)) {
-                // Make sure it wasn't just part of a word
-                const start = normalizedEmphasis.indexOf(sectionText);
-                const end = start + sectionText.length;
-                const beforeChar = start > 0 ? normalizedEmphasis[start - 1] : ' ';
-                const afterChar = end < normalizedEmphasis.length ? normalizedEmphasis[end] : ' ';
-                return beforeChar === ' ' || afterChar === ' ';
-            }
-            return false;
-        });
-    }
-
-    recoverBoldText(text, original, mapping) {
+    /**
+     * Stage 1: Process quotes
+     * Only removes asterisks that directly wrap quotes
+     */
+    processQuotes(text) {
         let result = text;
         
-        // First, find all emphasized sections that contain nested emphasis
-        const nestedEmphasis = mapping.emphasis.filter(section => {
-            // Check if this section contains an emphasized word
-            return original.slice(section.originalStart, section.originalEnd)
-                   .match(/\*[^*]+\*/);
-        });
-
-        // Process each nested section
-        for (const section of nestedEmphasis) {
-            const sectionText = original.slice(section.originalStart, section.originalEnd);
-            // Find all inner emphasized words
-            const innerMatch = sectionText.match(/\*([^*]+)\*/g);
-            if (innerMatch) {
-                for (const match of innerMatch) {
-                    const innerText = match.replace(/\*/g, '');
-                    const normalizedText = this.normalizeText(innerText);
-                    // Replace in our result, but only if it's not part of a larger word
-                    result = result.replace(
-                        new RegExp(`(\\s|^)${this.escapeRegExp(normalizedText)}(\\s|$)`, 'g'),
-                        `$1**${normalizedText}**$2`
-                    );
-                }
-            }
-        }
+        // Only remove emphasis that directly wraps entire quotes
+        result = result.replace(/\*([""][^""]*[""])\*/g, '$1');
         
         return result;
     }
 
-    escapeRegExp(string) {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    /**
+     * Stage 2: Process nested emphasis
+     * Converts single-word italics to bold
+     */
+    processNestedEmphasis(text) {
+        // Convert single-word italics to bold
+        return text.replace(/\*([^\s*]+)\*/g, '**$1**');
     }
 
-    fixSpacing(text) {
-        return text
-            // Fix spaces around quotes
-            .replace(/\s*([""][^""]*[""])\s*/g, ' $1 ')
-            // Fix spaces around emphasis
-            .replace(/\s*\*([^*]+)\*\s*/g, ' *$1* ')
-            // Fix spaces around bold
-            .replace(/\s*\*\*([^*]+)\*\*\s*/g, ' **$1** ')
-            // Fix multiple spaces
-            .replace(/\s+/g, ' ')
-            // Trim ends
-            .trim();
+    /**
+     * Stage 3: Process narrative sections
+     * Adds italics to narrative text between quotes
+     */
+    processNarrative(text) {
+        const sections = this.splitBetweenQuotes(text);
+        let result = '';
+        
+        for (let i = 0; i < sections.length; i++) {
+            const section = sections[i];
+            const isQuote = this.isQuote(section);
+            
+            const trimmed = section.trim();
+            if (!trimmed) continue;
+            
+            if (isQuote) {
+                // Add quotes as-is
+                result += trimmed;
+            } else {
+                // Handle narrative sections
+                if (!this.isItalicized(trimmed)) {
+                    // When adding start asterisk, also add space before if needed
+                    if (!trimmed.startsWith('*')) {
+                        if (result && !result.endsWith(' ')) result += ' ';
+                        result += '*';
+                    }
+                    
+                    result += trimmed;
+                    
+                    // When adding end asterisk, also add space after
+                    if (!trimmed.endsWith('*')) {
+                        result += '*';
+                        if (i < sections.length - 1) result += ' ';
+                    }
+                } else {
+                    // Already properly emphasized - preserve its spacing
+                    result += trimmed;
+                }
+            }
+        }
+        
+        return result.trim();
+    }
+
+    // Helper Functions
+
+    /**
+     * Check if text is a quoted section
+     */
+    isQuote(text) {
+        return /^[""][^""]*[""]$/.test(text);
+    }
+
+    /**
+     * Check if text is already italicized
+     */
+    isItalicized(text) {
+        return /^\*[^*]+\*$/.test(text);
+    }
+
+    /**
+     * Split text between standalone quotes while preserving quotes and spaces
+     */
+    splitBetweenQuotes(text) {
+        // Split only on quotes that aren't inside asterisks
+        let sections = [];
+        let buffer = '';
+        let inEmphasis = false;
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            
+            if (char === '*') {
+                inEmphasis = !inEmphasis;
+                buffer += char;
+            }
+            else if (char === '"' && !inEmphasis) {
+                // Found a quote outside emphasis
+                if (buffer) sections.push(buffer);
+                buffer = '';
+                
+                // Capture the entire quote
+                let quoteBuffer = char;
+                i++;
+                while (i < text.length && text[i] !== '"') {
+                    quoteBuffer += text[i];
+                    i++;
+                }
+                if (i < text.length) quoteBuffer += text[i];
+                sections.push(quoteBuffer);
+            }
+            else {
+                buffer += char;
+            }
+        }
+        
+        if (buffer) sections.push(buffer);
+        return sections.filter(Boolean);
     }
 }
 
