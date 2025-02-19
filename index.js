@@ -90,33 +90,34 @@ class TextProcessor {
         
         for (let i = 0; i < sections.length; i++) {
             const section = sections[i];
-            const isQuote = this.isQuote(section);
+            // Prevent double spaces when joining sections
+            if (result && section.raw && result.endsWith(' ') && section.raw.startsWith(' ')) {
+                // Remove one of the spaces
+                result = result.slice(0, -1);
+            }
             
-            const trimmed = section.trim();
-            if (!trimmed) continue;
-            
-            if (isQuote) {
-                // Add quotes as-is
-                result += trimmed;
+            if (section.type === 'quote') {
+                // Add quotes as-is with original spacing
+                result += section.raw;
             } else {
                 // Handle narrative sections
-                if (!this.isItalicized(trimmed)) {
-                    // When adding start asterisk, also add space before if needed
-                    if (!trimmed.startsWith('*')) {
+                if (!this.isItalicized(section.text)) {
+                    // When adding start asterisk, also add space if needed
+                    if (!section.text.startsWith('*')) {
                         if (result && !result.endsWith(' ')) result += ' ';
                         result += '*';
                     }
                     
-                    result += trimmed;
+                    result += section.text;
                     
-                    // When adding end asterisk, also add space after
-                    if (!trimmed.endsWith('*')) {
+                    // When adding end asterisk, also add space if needed
+                    if (!section.text.endsWith('*')) {
                         result += '*';
-                        if (i < sections.length - 1) result += ' ';
+                        if (i < sections.length - 1 && !section.text.endsWith(' ')) result += ' ';
                     }
                 } else {
-                    // Already properly emphasized - preserve its spacing
-                    result += trimmed;
+                    // Already properly emphasized - preserve original spacing
+                    result += section.raw;
                 }
             }
         }
@@ -141,7 +142,7 @@ class TextProcessor {
     }
 
     /**
-     * Split text between standalone quotes while preserving quotes and spaces
+     * Split text between standalone quotes while preserving quotes and original spacing
      */
     splitBetweenQuotes(text) {
         // Split only on quotes that aren't inside asterisks
@@ -158,26 +159,59 @@ class TextProcessor {
             }
             else if (char === '"' && !inEmphasis) {
                 // Found a quote outside emphasis
-                if (buffer) sections.push(buffer);
+                if (buffer) {
+                    // Look ahead for spaces that should belong to this section
+                    while (i + 1 < text.length && text[i + 1] === ' ') {
+                        buffer += ' ';
+                        i++;
+                    }
+                    sections.push({
+                        raw: buffer,
+                        text: buffer.trim(),
+                        type: 'narrative'
+                    });
+                }
                 buffer = '';
                 
-                // Capture the entire quote
-                let quoteBuffer = char;
+                // Check for a single space before the quote
+                let leadingSpace = (i > 0 && text[i - 1] === ' ') ? ' ' : '';
+                
+                // Add quote with optional leading space
+                let quoteBuffer = leadingSpace + char;
+                
+                // Capture the quote content
                 i++;
                 while (i < text.length && text[i] !== '"') {
                     quoteBuffer += text[i];
                     i++;
                 }
                 if (i < text.length) quoteBuffer += text[i];
-                sections.push(quoteBuffer);
+                
+                // Check for a single trailing space
+                if (i + 1 < text.length && text[i + 1] === ' ') {
+                    quoteBuffer += ' ';
+                    i++; // Move past the space
+                }
+                
+                sections.push({
+                    raw: quoteBuffer,
+                    text: quoteBuffer.trim(),
+                    type: 'quote'
+                });
             }
             else {
                 buffer += char;
             }
         }
         
-        if (buffer) sections.push(buffer);
-        return sections.filter(Boolean);
+        if (buffer) {
+            sections.push({
+                raw: buffer,
+                text: buffer.trim(),
+                type: 'narrative'
+            });
+        }
+        return sections.filter(s => s.text);
     }
 }
 
