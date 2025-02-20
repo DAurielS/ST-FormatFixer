@@ -88,6 +88,9 @@ class TextProcessor {
             // Stage 6: Clean up any excessive newlines
             result = this.cleanupExcessNewlines(result);
             
+            // Stage 7: Merge nested emphasis
+            result = this.mergeNestedEmphasis(result);
+            
             return result;
         } catch (error) {
             console.error('Format Fixer error:', error);
@@ -204,6 +207,87 @@ class TextProcessor {
         return text.replace(/\n{3,}/g, '\n\n');
     }
 
+    /**
+     * Stage 7: Merge nested emphasis
+     * Processes text in sections bounded by quotes and newlines,
+     * cleaning up sections that have erroneous asterisks.
+     * Key features:
+     * - Stops at quote and newline boundaries
+     * - Preserves bold (**) formatting
+     * - Merges sections with more than 2 single asterisks
+     * - Maintains proper spacing
+     */
+    mergeNestedEmphasis(text) {
+        let result = '';
+        let sectionStart = -1;  // Start of current section being analyzed
+        let asteriskCount = 0;  // Count of single asterisks in current section
+        let buffer = '';
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            
+            // Check for section boundaries
+            if (char === '"' || char === '\n') {
+                // Hit a natural boundary, add everything up to here and reset
+                if (sectionStart !== -1) {
+                    result += buffer;
+                    sectionStart = -1;
+                }
+                result += char;
+                asteriskCount = 0;
+                buffer = '';
+                continue;
+            }
+            
+            // Handle bold markers
+            if (char === '*' && text[i + 1] === '*') {
+                if (sectionStart === -1) {
+                    result += '**';  // Not in a section, just add bold marker
+                } else {
+                    buffer += '**';  // In a section, add to buffer
+                }
+                i++;  // Skip next asterisk
+                continue;
+            }
+            
+            // Handle single asterisks
+            if (char === '*') {
+                if (sectionStart === -1) {
+                    // Start new section
+                    sectionStart = i;
+                    asteriskCount = 1;
+                    buffer = '*';
+                } else {
+                    // In a section
+                    asteriskCount++;
+                    if (asteriskCount === 3) {
+                        // Found an erroneous asterisk, clean up the section
+                        buffer = '*' + buffer.slice(1).replace(/\*(?!\*)/g, '');
+                    } else {
+                        buffer += char;
+                    }
+                }
+            } else {
+                if (sectionStart === -1) {
+                    result += char;
+                } else {
+                    buffer += char;
+                }
+            }
+        }
+        
+        // Add any remaining buffer
+        if (sectionStart !== -1) {
+            if (asteriskCount >= 3) {
+                // Clean up final section if needed
+                buffer = '*' + buffer.slice(1, -1).replace(/\*(?!\*)/g, '') + '*';
+            }
+            result += buffer;
+        }
+        
+        return result;
+    }
+    
     // Helper Functions
 
     /**
