@@ -45,9 +45,20 @@ class TextProcessor {
         this.debugLog = [];
     }
 
+    /**
+     * Stage 0: Normalize smart quotes to regular quotes
+     * Converts both opening (“) and closing (”) smart quotes to regular quotes (")
+     */
+    normalizeQuotes(text) {
+        return text.replace(/[“”]/g, '"');
+    }
+
     processText(text) {
         try {
             let result = text;
+            
+            // Stage 0: Normalize smart quotes to regular quotes
+            result = this.normalizeQuotes(result);
             
             // Stage 1: Process quotes (keep the working version)
             result = this.processQuotes(result);
@@ -55,7 +66,13 @@ class TextProcessor {
             // Stage 2: Convert single-word italics to bold
             result = this.processNestedEmphasis(result);
             
-            // Stage 3: Process narrative sections
+            // Stage 3: Clean up any triple asterisks
+            result = this.cleanupTripleAsterisks(result);
+            
+            // Stage 4: Clean up lone asterisks in quotes
+            result = this.cleanupLoneAsterisks(result);
+            
+            // Stage 5: Process narrative sections
             result = this.processNarrative(result);
             
             return result;
@@ -72,8 +89,14 @@ class TextProcessor {
     processQuotes(text) {
         let result = text;
         
-        // Only remove emphasis that directly wraps entire quotes
-        result = result.replace(/\*([""][^""]*[""])\*/g, '$1');
+        // Handle quotes with emphasis at start or end or both
+        result = result
+            // Remove emphasis wrapping entire quotes
+            .replace(/\*([""][^""]*[""])\*/g, '$1')
+            // Remove emphasis at start of quotes
+            .replace(/\*([""][^""]*[""]) *(?!\*)/g, '$1')
+            // Remove emphasis at end of quotes
+            .replace(/(?<!\*) *([""][^""]*[""])\*/g, '$1');
         
         return result;
     }
@@ -88,7 +111,28 @@ class TextProcessor {
     }
 
     /**
-     * Stage 3: Process narrative sections
+     * Stage 3: Clean up triple asterisks
+     * Replaces any sequence of 3 or more asterisks with 2 asterisks
+     */
+    cleanupTripleAsterisks(text) {
+        return text.replace(/\*{3,}/g, '**');
+    }
+
+    /**
+     * Stage 4: Clean up lone asterisks within quotes
+     * Only removes asterisks that appear to be broken formatting
+     */
+    cleanupLoneAsterisks(text) {
+        // Specifically target asterisks within quotes that:
+        // 1. Have a word character on one side only
+        // 2. Don't appear to be part of a bold pattern
+        return text.replace(/"[^"]*"/g, match =>
+            match.replace(/\b\*(?!\*)|(?<!\*)\*\b/g, '')
+        );
+    }
+
+    /**
+     * Stage 5: Process narrative sections
      * Adds italics to narrative text between quotes
      */
     processNarrative(text) {
@@ -97,21 +141,27 @@ class TextProcessor {
         
         for (let i = 0; i < sections.length; i++) {
             const section = sections[i];
+            
             // Prevent double spaces when joining sections
             if (result && section.raw && result.endsWith(' ') && section.raw.startsWith(' ')) {
                 // Remove one of the spaces
                 result = result.slice(0, -1);
             }
             
-            if (section.type === 'quote') {
+            if (section.type === 'newline') {
+                // Preserve paragraph breaks
+                result += section.raw;
+            }
+            else if (section.type === 'quote') {
                 // Add quotes as-is with original spacing
                 result += section.raw;
-            } else {
+            }
+            else {
                 // Handle narrative sections
                 if (!this.isItalicized(section.text)) {
                     // When adding start asterisk, also add space if needed
                     if (!section.text.startsWith('*')) {
-                        if (result && !result.endsWith(' ')) result += ' ';
+                        if (result && !result.endsWith(' ') && !result.endsWith('\n')) result += ' ';
                         result += '*';
                     }
                     
@@ -120,7 +170,7 @@ class TextProcessor {
                     // When adding end asterisk, also add space if needed
                     if (!section.text.endsWith('*')) {
                         result += '*';
-                        if (i < sections.length - 1 && !section.text.endsWith(' ')) result += ' ';
+                        if (i < sections.length - 1 && !section.text.endsWith(' ') && sections[i + 1].type !== 'newline') result += ' ';
                     }
                 } else {
                     // Already properly emphasized - preserve original spacing
@@ -152,10 +202,21 @@ class TextProcessor {
      * Split text between standalone quotes while preserving quotes and original spacing
      */
     splitBetweenQuotes(text) {
-        // Split only on quotes that aren't inside asterisks
+        // Split on quotes and newlines
         let sections = [];
         let buffer = '';
         let inEmphasis = false;
+        
+        const pushBuffer = () => {
+            if (buffer) {
+                sections.push({
+                    raw: buffer,
+                    text: buffer.trim(),
+                    type: 'narrative'
+                });
+                buffer = '';
+            }
+        };
         
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
@@ -166,19 +227,7 @@ class TextProcessor {
             }
             else if (char === '"' && !inEmphasis) {
                 // Found a quote outside emphasis
-                if (buffer) {
-                    // Look ahead for spaces that should belong to this section
-                    while (i + 1 < text.length && text[i + 1] === ' ') {
-                        buffer += ' ';
-                        i++;
-                    }
-                    sections.push({
-                        raw: buffer,
-                        text: buffer.trim(),
-                        type: 'narrative'
-                    });
-                }
-                buffer = '';
+                pushBuffer();
                 
                 // Check for a single space before the quote
                 let leadingSpace = (i > 0 && text[i - 1] === ' ') ? ' ' : '';
@@ -206,19 +255,32 @@ class TextProcessor {
                     type: 'quote'
                 });
             }
+            else if (char === '\n') {
+                // End current section at newline
+                buffer += char;
+                pushBuffer();
+                
+                // Count consecutive newlines
+                let newlineCount = 1;
+                while (i + 1 < text.length && text[i + 1] === '\n') {
+                    newlineCount++;
+                    i++;
+                }
+                
+                // Always create a newline section
+                sections.push({
+                    raw: newlineCount > 1 ? '\n\n' : '\n',  // Preserve single newlines, normalize multiples to double
+                    text: '',
+                    type: 'newline'
+                });
+            }
             else {
                 buffer += char;
             }
         }
         
-        if (buffer) {
-            sections.push({
-                raw: buffer,
-                text: buffer.trim(),
-                type: 'narrative'
-            });
-        }
-        return sections.filter(s => s.text);
+        pushBuffer();
+        return sections.filter(s => s.text || s.type === 'newline');
     }
 }
 
