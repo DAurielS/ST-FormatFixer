@@ -256,6 +256,30 @@ class TextProcessor {
                     type: 'code'
                 });
             }
+            // Check for think tags
+            else if (char === '<' && i + 6 < text.length && text.slice(i, i + 7) === '<think>') {
+                let thinkBuffer = '<think>';
+                i += 6;  // Move past '<think>'
+                
+                // Capture everything until closing tag
+                i++;
+                while (i < text.length) {
+                    if (text[i] === '<' && i + 7 < text.length && text.slice(i, i + 8) === '</think>') {
+                        thinkBuffer += '</think>';
+                        i += 7;  // Move past '</think>'
+                        break;
+                    }
+                    thinkBuffer += text[i];
+                    i++;
+                }
+                
+                pushBuffer();  // Push any content before the think block
+                sections.push({
+                    raw: thinkBuffer,
+                    text: thinkBuffer,
+                    type: 'code'  // Reuse code type since we want the same behavior
+                });
+            }
             else if (char === '*') {
                 inEmphasis = !inEmphasis;
                 buffer += char;
