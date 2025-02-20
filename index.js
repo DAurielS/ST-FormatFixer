@@ -107,7 +107,8 @@ class TextProcessor {
      */
     processNestedEmphasis(text) {
         // Convert single-word italics to bold
-        return text.replace(/\*([^\s*]+)\*/g, '**$1**');
+        // Only match actual words (letters, numbers, and allowed punctuation)
+        return text.replace(/\*([\w'-]+)\*/g, '**$1**');
     }
 
     /**
