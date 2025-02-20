@@ -37,6 +37,16 @@ const TEST_CASES = {
         name: "Ultimate Test Case",
         input: '*"Where did I learn those words?"* Fwench Fwy repeats, one paw tapping their chin thoughtfully. *"Hmm, let\'s see... a little bit from here, a little bit from there. You know, being an ancient, all-powerful wish dragon has its perks! I can peek into any reality, any time period, any... *website*."* They giggle, the sound like wind chimes mixed with a dial-up modem.',
         expected: '"Where did I learn those words?" *Fwench Fwy repeats, one paw tapping their chin thoughtfully.* "Hmm, let\'s see... a little bit from here, a little bit from there. You know, being an ancient, all-powerful wish dragon has its perks! I can peek into any reality, any time period, any... **website**." *They giggle, the sound like wind chimes mixed with a dial-up modem.*'
+    },
+    cyoa: {
+        name: "CYOA Options",
+        input: '*The ancient tome presents you with several choices:*\n\n1. Open the mysterious door\n2> Investigate the strange sounds\nA) Talk to the old man\nB. Run away as fast as possible',
+        expected: '*The ancient tome presents you with several choices:*\n\n1. Open the mysterious door\n2> Investigate the strange sounds\nA) Talk to the old man\nB. Run away as fast as possible'
+    },
+    custom: {
+        name: "Custom Input",
+        input: "",
+        expected: ""
     }
 };
 
@@ -292,6 +302,33 @@ class TextProcessor {
                     type: 'code'  // Reuse code type since we want the same behavior
                 });
             }
+            // Check for CYOA-style lines at line start
+            else if ((buffer === '' || buffer.endsWith('\n')) &&
+                    /^[a-zA-Z0-9]/.test(char) &&
+                    i + 1 < text.length &&
+                    /[.>)]/.test(text[i + 1])) {
+                // Found a CYOA-style line
+                pushBuffer();  // Push any content before
+                
+                let cyoaBuffer = char + text[i + 1];  // Add the number/letter and delimiter
+                i++;  // Move past delimiter
+                
+                // Capture the rest of the line
+                i++;
+                while (i < text.length && text[i] !== '\n') {
+                    cyoaBuffer += text[i];
+                    i++;
+                }
+                if (i < text.length) {
+                    cyoaBuffer += text[i];  // Include the newline
+                }
+                
+                sections.push({
+                    raw: cyoaBuffer,
+                    text: cyoaBuffer,
+                    type: 'code'  // Use code type to exempt from processing
+                });
+            }
             else if (char === '*') {
                 inEmphasis = !inEmphasis;
                 buffer += char;
@@ -415,6 +452,8 @@ jQuery(async () => {
                                 <option value="complex">Complex Mixed Formatting</option>
                                 <option value="narrative_quote">Quote Within Narrative</option>
                                 <option value="ultimate">Ultimate Test Case</option>
+                                <option value="cyoa">CYOA Options</option>
+                                <option value="custom">Custom Input</option>
                             </select>
                         </div>
 
