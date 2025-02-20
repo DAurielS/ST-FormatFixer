@@ -313,28 +313,56 @@ class TextProcessor {
      * Looks ahead and behind for matching asterisks, considering quote boundaries
      */
     isWithinEmphasis(text, position) {
-        // Look back for the opening asterisk
-        let openPos = -1;
-        for (let i = position; i >= 0; i--) {
-            if (text[i] === '*' && text[i+1] !== '*') {  // Skip bold markers
-                openPos = i;
-                break;
-            }
+        // First find paragraph bounds
+        let paragraphStart = position;
+        while (paragraphStart > 0 && text[paragraphStart - 1] !== '\n') {
+            paragraphStart--;
         }
         
-        if (openPos === -1) return false;  // No opening asterisk found
+        let paragraphEnd = text.indexOf('\n', position);
+        if (paragraphEnd === -1) paragraphEnd = text.length;
+
+        // Look for relevant opening asterisk, skipping complete pairs
+        let openPos = -1;
+        let i = paragraphStart;
+        while (i < position) {
+            if (text[i] === '*') {
+                if (text[i + 1] === '*') {
+                    i += 2;  // Skip bold markers
+                    continue;
+                }
+                
+                // Look for matching closer before our position
+                let hasMatch = false;
+                for (let j = i + 1; j < position; j++) {
+                    if (text[j] === '*' && text[j-1] !== '*' && text[j+1] !== '*') {
+                        hasMatch = true;
+                        i = j + 1;  // Skip to after this complete pair
+                        break;
+                    }
+                }
+                
+                if (!hasMatch) {
+                    // Found an unpaired opening asterisk
+                    openPos = i;
+                    break;
+                }
+            }
+            i++;
+        }
         
-        // Look ahead for closing asterisk
+        if (openPos === -1) return false;  // No relevant opening asterisk found
+        
+        // Look for matching closing asterisk within paragraph
         let closePos = -1;
-        for (let i = position + 1; i < text.length; i++) {
-            if (text[i] === '\n') return false;  // Paragraph break - not within emphasis
-            if (text[i] === '*' && text[i-1] !== '*') {  // Skip bold markers
+        for (i = position + 1; i < paragraphEnd; i++) {
+            if (text[i] === '*' && text[i-1] !== '*' && text[i+1] !== '*') {
                 closePos = i;
                 break;
             }
         }
         
-        return closePos !== -1;  // True if we found both opening and closing asterisks
+        return closePos !== -1;  // True if we found both opening and closing asterisks within paragraph
     }
 
     /**
