@@ -152,7 +152,7 @@ class TextProcessor {
                 // Preserve paragraph breaks
                 result += section.raw;
             }
-            else if (section.type === 'quote') {
+            else if (section.type === 'quote' || section.type === 'code') {
                 // Add quotes as-is with original spacing
                 result += section.raw;
             }
@@ -221,7 +221,42 @@ class TextProcessor {
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
             
-            if (char === '*') {
+            // Check for code blocks first
+            if (char === '`') {
+                // Found potential code block
+                let codeBuffer = char;
+                
+                // Check if it's a triple backtick
+                let isTriple = false;
+                if (i + 2 < text.length && text[i + 1] === '`' && text[i + 2] === '`') {
+                    codeBuffer += '``';
+                    isTriple = true;
+                    i += 2;
+                }
+                
+                // Capture everything until closing backticks
+                i++;
+                while (i < text.length) {
+                    codeBuffer += text[i];
+                    if (text[i] === '`') {
+                        if (!isTriple) break;
+                        if (i + 2 < text.length && text[i + 1] === '`' && text[i + 2] === '`') {
+                            codeBuffer += '``';
+                            i += 2;
+                            break;
+                        }
+                    }
+                    i++;
+                }
+                
+                pushBuffer();  // Push any content before the code block
+                sections.push({
+                    raw: codeBuffer,
+                    text: codeBuffer,
+                    type: 'code'
+                });
+            }
+            else if (char === '*') {
                 inEmphasis = !inEmphasis;
                 buffer += char;
             }
@@ -293,11 +328,7 @@ function formatCommand(_, text) {
         return "Please provide text to format";
     }
     try {
-        const formattedText = processor.processText(text);
-        if (formattedText === text) {
-            return "No formatting changes needed";
-        }
-        return formattedText;
+        return processor.processText(text);
     } catch (error) {
         console.error('Format command error:', error);
         return `Error formatting text: ${error.message}`;
