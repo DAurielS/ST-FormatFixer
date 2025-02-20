@@ -26,7 +26,7 @@ const TEST_CASES = {
     complex: {
         name: "Complex Mixed Formatting",
         input: '*"Where did they go?"* The cat wondered, watching the *mysterious* figure disappear into the *dark and *spooky* night.*',
-        expected: '"Where did they go?" *The cat wondered, watching the **mysterious** figure disappear into the *dark and **spooky** night.*'
+        expected: '"Where did they go?" *The cat wondered, watching the **mysterious** figure disappear into the dark and **spooky** night.*'
     },
     narrative_quote: {
         name: "Quote Within Narrative",
@@ -284,8 +284,7 @@ class TextProcessor {
         // Add any remaining buffer
         if (sectionStart !== -1) {
             if (asteriskCount >= 3) {
-                // Clean up final section if needed
-                buffer = '*' + buffer.slice(1, -1).replace(/\*(?!\*)/g, '') + '*';
+                buffer = '*' + buffer.slice(1) + '*';
             }
             result += buffer;
         }
@@ -310,13 +309,41 @@ class TextProcessor {
     }
 
     /**
+     * Helper method to check if a position in text is within a proper emphasis section
+     * Looks ahead and behind for matching asterisks, considering quote boundaries
+     */
+    isWithinEmphasis(text, position) {
+        // Look back for the opening asterisk
+        let openPos = -1;
+        for (let i = position; i >= 0; i--) {
+            if (text[i] === '*' && text[i+1] !== '*') {  // Skip bold markers
+                openPos = i;
+                break;
+            }
+        }
+        
+        if (openPos === -1) return false;  // No opening asterisk found
+        
+        // Look ahead for closing asterisk
+        let closePos = -1;
+        for (let i = position + 1; i < text.length; i++) {
+            if (text[i] === '\n') return false;  // Paragraph break - not within emphasis
+            if (text[i] === '*' && text[i-1] !== '*') {  // Skip bold markers
+                closePos = i;
+                break;
+            }
+        }
+        
+        return closePos !== -1;  // True if we found both opening and closing asterisks
+    }
+
+    /**
      * Split text between standalone quotes while preserving quotes and original spacing
      */
     splitBetweenQuotes(text) {
         // Split on quotes and newlines
         let sections = [];
         let buffer = '';
-        let inEmphasis = false;
         
         const pushBuffer = () => {
             if (buffer) {
@@ -418,12 +445,12 @@ class TextProcessor {
                     type: 'code'  // Use code type to exempt from processing
                 });
             }
+
             else if (char === '*') {
-                inEmphasis = !inEmphasis;
                 buffer += char;
             }
-            else if (char === '"' && !inEmphasis) {
-                // Found a quote outside emphasis
+            
+            else if (char === '"' && !this.isWithinEmphasis(text, i)) {
                 pushBuffer();
                 
                 // Check for a single space before the quote
