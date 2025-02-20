@@ -262,7 +262,12 @@ class TextProcessor {
                     asteriskCount++;
                     if (asteriskCount === 3) {
                         // Found an erroneous asterisk, clean up the section
-                        buffer = '*' + buffer.slice(1).replace(/\*(?!\*)/g, '');
+                        // First preserve bold sections by temporarily marking them
+                        let cleaned = buffer.replace(/\*\*([^*]+)\*\*/g, '@@$1@@');
+                        // Then clean up single asterisks
+                        cleaned = '*' + cleaned.slice(1).replace(/\*/g, '');
+                        // Finally restore bold sections
+                        buffer = cleaned.replace(/@@([^@]+)@@/g, '**$1**');
                     } else {
                         buffer += char;
                     }
