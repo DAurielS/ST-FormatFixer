@@ -75,6 +75,9 @@ class TextProcessor {
             // Stage 5: Process narrative sections
             result = this.processNarrative(result);
             
+            // Stage 6: Clean up any excessive newlines
+            result = this.cleanupExcessNewlines(result);
+            
             return result;
         } catch (error) {
             console.error('Format Fixer error:', error);
@@ -181,6 +184,14 @@ class TextProcessor {
         }
         
         return result.trim();
+    }
+    
+    /**
+     * Stage 6: Clean up excessive newlines
+     * Replaces any sequence of 3+ newlines with exactly 2
+     */
+    cleanupExcessNewlines(text) {
+        return text.replace(/\n{3,}/g, '\n\n');
     }
 
     // Helper Functions
