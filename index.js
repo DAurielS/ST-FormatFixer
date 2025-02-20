@@ -1,5 +1,12 @@
 import { extension_settings, getContext } from "../../../extensions.js";
-import { registerSlashCommand } from "../../../slash-commands.js";
+import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
+import { SlashCommand } from "../../../slash-commands/SlashCommand.js";
+import {
+    ARGUMENT_TYPE,
+    SlashCommandArgument,
+    SlashCommandNamedArgument,
+} from '../../../slash-commands/SlashCommandArgument.js';
+import { ToolManager } from '../../../tool-calling.js';
 
 // Extension name
 const extensionName = "ST-FormatFixer";
@@ -218,8 +225,8 @@ class TextProcessor {
 // Initialize processor
 const processor = new TextProcessor();
 
-// Register slash command
-registerSlashCommand("format", (_, text) => {
+// Format command function
+function formatCommand(_, text) {
     if (!text) {
         return "Please provide text to format";
     }
@@ -233,7 +240,31 @@ registerSlashCommand("format", (_, text) => {
         console.error('Format command error:', error);
         return `Error formatting text: ${error.message}`;
     }
-}, ["fmt"], "Format text with proper emphasis and quotes. Usage: /format your text here");
+}
+
+// Register slash command with new parser
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'format',
+    aliases: ['fmt'],
+    description: 'Format text with proper emphasis and quotes',
+    callback: formatCommand,
+    returns: 'the formatted text with proper emphasis and quotes',
+    helpString: `
+        <div>
+            <p>Formats text by fixing common formatting issues:</p>
+            <ul>
+                <li>Properly handles quotes and narrative sections</li>
+                <li>Converts single-word italics to bold</li>
+                <li>Fixes spacing around emphasis markers</li>
+            </ul>
+            <div>
+                <strong>Examples:</strong>
+                <pre><code>/format *"Hello,"* she said *"I'm happy to meet you."*</code></pre>
+                <p>Returns: "Hello," *she said* "I'm happy to meet you."</p>
+            </div>
+        </div>
+    `
+}));
 
 // Initialize extension
 jQuery(async () => {
@@ -291,15 +322,37 @@ jQuery(async () => {
 
         // Handle test button click
         $("#format_fixer_test").on("click", () => {
-            const testCase = TEST_CASES[$("#format_fixer_test_case").val()];
-            if (testCase) {
-                const result = processor.processText(testCase.input);
-                const passed = result === testCase.expected;
+            try {
+                const inputText = $("#format_fixer_test_input").val().trim();
+                if (!inputText) {
+                    $("#format_fixer_test_output").val("Please enter some text to format");
+                    return;
+                }
+
+                const result = processor.processText(inputText);
+                const testCase = TEST_CASES[$("#format_fixer_test_case").val()];
                 
+                // If this matches a test case input, compare with expected
+                if (testCase && inputText === testCase.input) {
+                    const passed = result === testCase.expected;
+                    $("#format_fixer_test_output").val(
+                        `Test Case: ${testCase.name}\n` +
+                        `Result: ${result}\n` +
+                        `Expected: ${testCase.expected}\n` +
+                        `Status: ${passed ? "✓ PASSED" : "✗ FAILED"}`
+                    );
+                } else {
+                    // Just show the formatted result for custom input
+                    $("#format_fixer_test_output").val(
+                        `Input: ${inputText}\n` +
+                        `Formatted: ${result}\n` +
+                        `${result === inputText ? "No changes needed" : "Text reformatted"}`
+                    );
+                }
+            } catch (error) {
+                console.error('Format test error:', error);
                 $("#format_fixer_test_output").val(
-                    `Result: ${result}\n` +
-                    `Expected: ${testCase.expected}\n` +
-                    `Status: ${passed ? "✓ PASSED" : "✗ FAILED"}`
+                    `Error formatting text: ${error.message}`
                 );
             }
         });
