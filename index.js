@@ -26,7 +26,7 @@ const TEST_CASES = {
     complex: {
         name: "Complex Mixed Formatting",
         input: '*"Where did they go?"* The cat wondered, watching the *mysterious* figure disappear into the *dark and *spooky* night.*',
-        expected: '"Where did they go?" *The cat wondered, watching the **mysterious** figure disappear into the *dark and **spooky** night.*'
+        expected: '"Where did they go?" *The cat wondered, watching the **mysterious** figure disappear into the dark and **spooky** night.*'
     },
     narrative_quote: {
         name: "Quote Within Narrative",
@@ -87,6 +87,9 @@ class TextProcessor {
             
             // Stage 6: Clean up any excessive newlines
             result = this.cleanupExcessNewlines(result);
+            
+            // Stage 7: Merge nested emphasis
+            result = this.mergeNestedEmphasis(result);
             
             return result;
         } catch (error) {
@@ -204,6 +207,91 @@ class TextProcessor {
         return text.replace(/\n{3,}/g, '\n\n');
     }
 
+    /**
+     * Stage 7: Merge nested emphasis
+     * Processes text in sections bounded by quotes and newlines,
+     * cleaning up sections that have erroneous asterisks.
+     * Key features:
+     * - Stops at quote and newline boundaries
+     * - Preserves bold (**) formatting
+     * - Merges sections with more than 2 single asterisks
+     * - Maintains proper spacing
+     */
+    mergeNestedEmphasis(text) {
+        let result = '';
+        let sectionStart = -1;  // Start of current section being analyzed
+        let asteriskCount = 0;  // Count of single asterisks in current section
+        let buffer = '';
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            
+            // Check for section boundaries
+            if (char === '"' || char === '\n') {
+                // Hit a natural boundary, add everything up to here and reset
+                if (sectionStart !== -1) {
+                    result += buffer;
+                    sectionStart = -1;
+                }
+                result += char;
+                asteriskCount = 0;
+                buffer = '';
+                continue;
+            }
+            
+            // Handle bold markers
+            if (char === '*' && text[i + 1] === '*') {
+                if (sectionStart === -1) {
+                    result += '**';  // Not in a section, just add bold marker
+                } else {
+                    buffer += '**';  // In a section, add to buffer
+                }
+                i++;  // Skip next asterisk
+                continue;
+            }
+            
+            // Handle single asterisks
+            if (char === '*') {
+                if (sectionStart === -1) {
+                    // Start new section
+                    sectionStart = i;
+                    asteriskCount = 1;
+                    buffer = '*';
+                } else {
+                    // In a section
+                    asteriskCount++;
+                    if (asteriskCount === 3) {
+                        // Found an erroneous asterisk, clean up the section
+                        // First preserve bold sections by temporarily marking them
+                        let cleaned = buffer.replace(/\*\*([^*]+)\*\*/g, '@@$1@@');
+                        // Then clean up single asterisks
+                        cleaned = '*' + cleaned.slice(1).replace(/\*/g, '');
+                        // Finally restore bold sections
+                        buffer = cleaned.replace(/@@([^@]+)@@/g, '**$1**');
+                    } else {
+                        buffer += char;
+                    }
+                }
+            } else {
+                if (sectionStart === -1) {
+                    result += char;
+                } else {
+                    buffer += char;
+                }
+            }
+        }
+        
+        // Add any remaining buffer
+        if (sectionStart !== -1) {
+            if (asteriskCount >= 3) {
+                buffer = '*' + buffer.slice(1) + '*';
+            }
+            result += buffer;
+        }
+        
+        return result;
+    }
+    
     // Helper Functions
 
     /**
@@ -221,13 +309,82 @@ class TextProcessor {
     }
 
     /**
+     * Helper method to check if a position in text is within a proper emphasis section
+     * Looks ahead and behind for matching asterisks, considering quote boundaries
+     */
+    isWithinEmphasis(text, position) {
+        // First find paragraph bounds
+        let paragraphStart = position;
+        while (paragraphStart > 0 && text[paragraphStart - 1] !== '\n') {
+            paragraphStart--;
+        }
+        
+        let paragraphEnd = text.indexOf('\n', position);
+        if (paragraphEnd === -1) paragraphEnd = text.length;
+
+        // Look for relevant opening asterisk, skipping complete pairs
+        let openPos = -1;
+        let i = paragraphStart;
+        while (i < position) {
+            if (text[i] === '*') {
+                if (text[i + 1] === '*') {
+                    i += 2;  // Skip bold markers
+                    continue;
+                }
+                
+                // Skip if asterisk has whitespace after it
+                if (text[i + 1] === ' ' || text[i + 1] === '\t') {
+                    i++;
+                    continue;
+                }
+
+                // Look for matching closer before our position
+                let hasMatch = false;
+                for (let j = i + 1; j < position; j++) {
+                    if (text[j] === '*' && text[j-1] !== '*' && text[j+1] !== '*') {
+                        hasMatch = true;
+                        i = j + 1;  // Skip to after this complete pair
+                        break;
+                    }
+                }
+                
+                if (!hasMatch) {
+                    // Found an unpaired opening asterisk
+                    openPos = i;
+                    break;
+                }
+            }
+            i++;
+        }
+        
+        if (openPos === -1) return false;  // No relevant opening asterisk found
+        
+        // Look for the first single asterisk after our position
+        let closePos = -1;
+        for (i = position + 1; i < paragraphEnd; i++) {
+            // First check if it's a single asterisk (not part of bold)
+            if (text[i] === '*' && text[i-1] !== '*' && text[i+1] !== '*') {
+                // If this asterisk has whitespace before it, it can't be a closer
+                // Return false immediately because any later asterisk would be after
+                // an invalid closing marker
+                if (text[i-1] === ' ' || text[i-1] === '\t') {
+                    return false;
+                }
+                closePos = i;
+                break;
+            }
+        }
+        
+        return closePos !== -1;  // True only if we found a valid closing asterisk
+    }
+
+    /**
      * Split text between standalone quotes while preserving quotes and original spacing
      */
     splitBetweenQuotes(text) {
         // Split on quotes and newlines
         let sections = [];
         let buffer = '';
-        let inEmphasis = false;
         
         const pushBuffer = () => {
             if (buffer) {
@@ -329,12 +486,12 @@ class TextProcessor {
                     type: 'code'  // Use code type to exempt from processing
                 });
             }
+
             else if (char === '*') {
-                inEmphasis = !inEmphasis;
                 buffer += char;
             }
-            else if (char === '"' && !inEmphasis) {
-                // Found a quote outside emphasis
+            
+            else if (char === '"' && !this.isWithinEmphasis(text, i)) {
                 pushBuffer();
                 
                 // Check for a single space before the quote
