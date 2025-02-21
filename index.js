@@ -435,7 +435,21 @@ class TextProcessor {
                     type: 'code'
                 });
             }
-            // Check for think tags
+            // Check for lone closing think tag first
+            else if (char === '<' && i + 7 < text.length && text.slice(i, i + 8) === '</think>') {
+                // Capture all text from start of buffer up to and including the tag
+                let thinkBuffer = buffer + '</think>';
+                i += 7;  // Move past '</think>'
+                
+                pushBuffer();  // Push content as think block
+                sections.push({
+                    raw: thinkBuffer,
+                    text: thinkBuffer,
+                    type: 'code'  // Reuse code type since we want the same behavior
+                });
+                buffer = '';  // Clear buffer since we've processed everything
+            }
+            // Check for complete think tags
             else if (char === '<' && i + 6 < text.length && text.slice(i, i + 7) === '<think>') {
                 let thinkBuffer = '<think>';
                 i += 6;  // Move past '<think>'
