@@ -332,6 +332,12 @@ class TextProcessor {
                     continue;
                 }
                 
+                // Skip if asterisk has whitespace after it
+                if (text[i + 1] === ' ' || text[i + 1] === '\t') {
+                    i++;
+                    continue;
+                }
+
                 // Look for matching closer before our position
                 let hasMatch = false;
                 for (let j = i + 1; j < position; j++) {
@@ -353,16 +359,23 @@ class TextProcessor {
         
         if (openPos === -1) return false;  // No relevant opening asterisk found
         
-        // Look for matching closing asterisk within paragraph
+        // Look for the first single asterisk after our position
         let closePos = -1;
         for (i = position + 1; i < paragraphEnd; i++) {
+            // First check if it's a single asterisk (not part of bold)
             if (text[i] === '*' && text[i-1] !== '*' && text[i+1] !== '*') {
+                // If this asterisk has whitespace before it, it can't be a closer
+                // Return false immediately because any later asterisk would be after
+                // an invalid closing marker
+                if (text[i-1] === ' ' || text[i-1] === '\t') {
+                    return false;
+                }
                 closePos = i;
                 break;
             }
         }
         
-        return closePos !== -1;  // True if we found both opening and closing asterisks within paragraph
+        return closePos !== -1;  // True only if we found a valid closing asterisk
     }
 
     /**
