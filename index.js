@@ -76,6 +76,9 @@ class TextProcessor {
             
             // Stage 4: Clean up lone asterisks in quotes
             result = this.cleanupLoneAsterisks(result);
+
+            // Stage 4.5: Clean up spaces between asterisks and text
+            result = this.cleanupAsteriskSpacing(result);
             
             // Stage 5: Process narrative sections
             result = this.processNarrative(result);
@@ -167,6 +170,20 @@ class TextProcessor {
         return text.replace(/"[^"]*"/g, match =>
             match.replace(/\b\*(?!\*)|(?<!\*)\*\b/g, '')
         );
+    }
+
+    /**
+     * Stage 4.5: Clean up spaces between asterisks and text
+     * Fixes cases where there are unnecessary spaces between emphasis markers and text
+     * Example: "* text *" becomes "*text*"
+     */
+    cleanupAsteriskSpacing(text) {
+        return text.replace(/(?<![\S])\*\s*([^*]+?)\s*\*(?![\S])/g, (match, content) => {
+            // Preserve any spaces before/after the section while cleaning internal spaces
+            const hasSpaceBefore = match.startsWith(' ');
+            const hasSpaceAfter = match.endsWith(' ');
+            return (hasSpaceBefore ? ' ' : '') + '*' + content.trim() + '*' + (hasSpaceAfter ? ' ' : '');
+        });
     }
 
     /**
