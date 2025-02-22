@@ -55,14 +55,6 @@ class TextProcessor {
         this.debugLog = [];
     }
 
-    /**
-     * Stage 0: Normalize smart quotes to regular quotes
-     * Converts both opening (“) and closing (”) smart quotes to regular quotes (")
-     */
-    normalizeQuotes(text) {
-        return text.replace(/[“”]/g, '"');
-    }
-
     processText(text) {
         try {
             let result = text;
@@ -72,6 +64,9 @@ class TextProcessor {
             
             // Stage 1: Process quotes (keep the working version)
             result = this.processQuotes(result);
+
+            // Stage 1.5: Cleanup consecutive double quotes
+            result = this.cleanupConsecutiveQuotes(result);
             
             // Stage 2: Convert single-word italics to bold
             result = this.processNestedEmphasis(result);
@@ -81,6 +76,9 @@ class TextProcessor {
             
             // Stage 4: Clean up lone asterisks in quotes
             result = this.cleanupLoneAsterisks(result);
+
+            // Stage 4.5: Clean up spaces between asterisks and text
+            result = this.cleanupAsteriskSpacing(result);
             
             // Stage 5: Process narrative sections
             result = this.processNarrative(result);
@@ -99,6 +97,14 @@ class TextProcessor {
     }
 
     /**
+     * Stage 0: Normalize smart quotes to regular quotes
+     * Converts both opening (“) and closing (”) smart quotes to regular quotes (")
+     */
+    normalizeQuotes(text) {
+        return text.replace(/[“”]/g, '"');
+    }
+
+    /**
      * Stage 1: Process quotes
      * Only removes asterisks that directly wrap quotes
      */
@@ -114,6 +120,24 @@ class TextProcessor {
             // Remove emphasis at end of quotes
             .replace(/(?<!\*) *([""][^""]*[""])\*/g, '$1');
         
+        return result;
+    }
+
+    /**
+     * Stage 1.5: Handles consecutive double quotes by removing the redundant ones
+     * Converts patterns like ""text"" to "text"
+     */
+    cleanupConsecutiveQuotes(text) {
+        let result = text;
+        
+        result = result
+            // Removes double quotes wrapping entire quotes
+            .replace(/"{2,}([^"]+)"{2,}/g, '"$1"')
+            // Removes double quotes at start of quotes
+            .replace(/"{2,}([^"]+)" *(?!\*)/g, '"$1"')
+            // Removes double quotes at end of quotes
+            .replace(/(?<!\*) *([^"]+)"{2,}/g, '$1"');
+
         return result;
     }
 
@@ -146,6 +170,20 @@ class TextProcessor {
         return text.replace(/"[^"]*"/g, match =>
             match.replace(/\b\*(?!\*)|(?<!\*)\*\b/g, '')
         );
+    }
+
+    /**
+     * Stage 4.5: Clean up spaces between asterisks and text
+     * Fixes cases where there are unnecessary spaces between emphasis markers and text
+     * Example: "* text *" becomes "*text*"
+     */
+    cleanupAsteriskSpacing(text) {
+        return text.replace(/(?<![\S])\*\s*([^*]+?)\s*\*(?![\S])/g, (match, content) => {
+            // Preserve any spaces before/after the section while cleaning internal spaces
+            const hasSpaceBefore = match.startsWith(' ');
+            const hasSpaceAfter = match.endsWith(' ');
+            return (hasSpaceBefore ? ' ' : '') + '*' + content.trim() + '*' + (hasSpaceAfter ? ' ' : '');
+        });
     }
 
     /**
