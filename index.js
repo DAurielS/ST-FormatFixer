@@ -59,8 +59,8 @@ class TextProcessor {
         try {
             let result = text;
             
-            // Stage 0: Normalize smart quotes to regular quotes
-            result = this.normalizeQuotes(result);
+            // Stage 0: Normalize all "smart" characters to regular characters
+            result = this.normalizeSmartCharacters(result);
             
             // Stage 1: Process quotes (keep the working version)
             result = this.processQuotes(result);
@@ -73,14 +73,17 @@ class TextProcessor {
             
             // Stage 3: Clean up any triple asterisks
             result = this.cleanupTripleAsterisks(result);
+
+            // Stage 4: Clean up unpaired double asterisks within text
+            result = this.cleanupUnpairedDoubleAsterisks(result);
             
-            // Stage 4: Clean up lone asterisks in quotes
+            // Stage 4.1: Clean up lone asterisks in quotes
             result = this.cleanupLoneAsterisks(result);
 
-            // Stage 4.5: Clean up spaces between asterisks and text
+            // Stage 4.2: Clean up spaces between asterisks and text
             result = this.cleanupAsteriskSpacing(result);
 
-            // Stage 4.6: Clean up spaces between quotes and text
+            // Stage 4.3: Clean up spaces between quotes and text
             result = this.cleanupQuoteSpacing(result);
 
             // Stage 5: Process narrative sections
@@ -100,13 +103,38 @@ class TextProcessor {
     }
 
     /**
-     * Stage 0: Normalize smart quotes to regular quotes
-     * Converts both opening (“) and closing (”) smart quotes to regular quotes (")
+     * Stage 0: Normalize smart characters
+     * Converts various smart typography characters to their basic ASCII equivalents
      */
-    normalizeQuotes(text) {
-        return text.replace(/[“”]/g, '"');
+    normalizeSmartCharacters(text) {
+        return text
+            // Double quotes (including fullwidth and ornamental variants)
+            .replace(/[\u00AB\u00BB\u201C\u201D\u02BA\u02EE\u201F\u275D\u275E\u301D\u301E\uFF02]/g, '"')
+            
+            // Single quotes and apostrophes (including modifiers and accents)
+            .replace(/[\u2018\u2019\u02BB\u02C8\u02BC\u02BD\u02B9\u201B\uFF07\u00B4\u02CA\u0060\u02CB\u275B\u275C\u0313\u0314]/g, "'")
+            
+            // Dashes and hyphens (preserving em dash)
+            .replace(/[\u2010\u2043\u23BC\u23BD\uFE63\uFF0D]/g, '-')
+            .replace(/\u2013/g, '-')  // en dash to hyphen
+            .replace(/\u2015/g, '\u2014')  // horizontal bar to em dash
+            
+            // Ellipsis
+            .replace(/\u2026/g, '...')
+            
+            // Various spaces
+            .replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000\uFEFF]/g, ' ')
+            
+            // Bullets and decorative characters
+            .replace(/[\u2022\u2043\u2219\u25D8\u25E6\u2619\u2765\u2767]/g, '*')
+            
+            // Angle quotes (guillemets)
+            .replace(/[\u2039\u203A\u00AB\u00BB]/g, '"')
+            
+            // Swung dash
+            .replace(/\u2053/g, '~');
     }
-
+    
     /**
      * Stage 1: Process quotes
      * Only removes asterisks that directly wrap quotes
@@ -163,7 +191,83 @@ class TextProcessor {
     }
 
     /**
-     * Stage 4: Clean up lone asterisks within quotes
+     * Stage 4: Clean up unpaired double asterisks within text
+     * Uses string traversal to find and remove orphaned ** markers
+     * while preserving properly matched pairs.
+     * Called after cleanupLoneAsterisks to handle cases within dialogue.
+     * Also called as a helper method within processNarrative.
+     */
+    cleanupUnpairedDoubleAsterisks(text) {
+        let result = text;
+        let allMatches = [];
+
+        // First find complete pairs (only matching word content)
+        const completePairs = result.match(/\*\*([\w'-]+)\*\*/g);
+        if (completePairs) {
+            allMatches = allMatches.concat(completePairs);
+            // Remove complete pairs from working text
+            result = result.replace(/\*\*([\w'-]+)\*\*/g, '');
+        }
+
+        // Then find unpaired double asterisks in the remaining text
+        const startAsterisks = result.match(/\*\*[\w'-]+/g);
+        const endAsterisks = result.match(/[\w'-]+\*\*/g);
+        
+        if (startAsterisks) allMatches = allMatches.concat(startAsterisks);
+        if (endAsterisks) allMatches = allMatches.concat(endAsterisks);
+
+        if (!allMatches.length) return text;
+        result = text;  // Reset result to original text for final processing
+
+        // Process each match
+        allMatches.forEach(match => {
+            let cleaned = '';
+            let i = 0;
+            
+            while (i < match.length) {
+                if (i + 1 < match.length && match[i] === '*' && match[i + 1] === '*') {
+                    // Look ahead for matching pair
+                    let found = false;
+                    let searchPos = i + 2;
+                    let matchEnd = -1;
+                    
+                    while (searchPos < match.length - 1) {
+                        if (match[searchPos] === '*' && match[searchPos + 1] === '*') {
+                            const between = match.substring(i + 2, searchPos).trim();
+                            if (between.length > 0 && !between.includes('**')) {
+                                found = true;
+                                matchEnd = searchPos + 2;
+                            }
+                            break;
+                        }
+                        searchPos++;
+                    }
+                    
+                    if (found) {
+                        // Keep complete pairs
+                        cleaned += match.substring(i, matchEnd);
+                        i = matchEnd;
+                    } else {
+                        // Skip unpaired double asterisk
+                        i += 2;
+                    }
+                    continue;
+                }
+                
+                cleaned += match[i];
+                i++;
+            }
+
+            if (match !== cleaned) {
+                result = result.replace(match, cleaned);
+            }
+        });
+        
+        return result;
+    }
+
+    /**
+     * Stage 4.1: Clean up lone asterisks within quotes
      * Only removes asterisks that appear to be broken formatting
      */
     cleanupLoneAsterisks(text) {
@@ -176,7 +280,7 @@ class TextProcessor {
     }
 
     /**
-     * Stage 4.5: Clean up spaces between asterisks and text
+     * Stage 4.2: Clean up spaces between asterisks and text
      * Fixes cases where there are unnecessary spaces between emphasis markers and text
      * Example: "* text *" becomes "*text*"
      */
@@ -190,7 +294,7 @@ class TextProcessor {
     }
 
     /**
-     * Stage 4.6: Clean up spaces between quotation marks and text
+     * Stage 4.3: Clean up spaces between quotation marks and text
      * Fixes cases where there are unnecessary spaces between quotes and text
      * Example: '" text "' becomes '"text"'
      */
