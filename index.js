@@ -83,7 +83,7 @@ class TextProcessor {
             // Stage 4.2: Clean up spaces between asterisks and text
             result = this.cleanupAsteriskSpacing(result);
 
-            // Stage 4.6: Clean up spaces between quotes and text
+            // Stage 4.3: Clean up spaces between quotes and text
             result = this.cleanupQuoteSpacing(result);
 
             // Stage 5: Process narrative sections
@@ -191,20 +191,7 @@ class TextProcessor {
     }
 
     /**
-     * Stage 4: Clean up lone asterisks within quotes
-     * Only removes asterisks that appear to be broken formatting
-     */
-    cleanupLoneAsterisks(text) {
-        // Specifically target asterisks within quotes that:
-        // 1. Have a word character on one side only
-        // 2. Don't appear to be part of a bold pattern
-        return text.replace(/"[^"]*"/g, match =>
-            match.replace(/\b\*(?!\*)|(?<!\*)\*\b/g, '')
-        );
-    }
-
-    /**
-     * Stage 4.3: Clean up unpaired double asterisks within text
+     * Stage 4: Clean up unpaired double asterisks within text
      * Uses string traversal to find and remove orphaned ** markers
      * while preserving properly matched pairs.
      * Called after cleanupLoneAsterisks to handle cases within dialogue.
@@ -280,7 +267,20 @@ class TextProcessor {
     }
 
     /**
-     * Stage 4.5: Clean up spaces between asterisks and text
+     * Stage 4.1: Clean up lone asterisks within quotes
+     * Only removes asterisks that appear to be broken formatting
+     */
+    cleanupLoneAsterisks(text) {
+        // Specifically target asterisks within quotes that:
+        // 1. Have a word character on one side only
+        // 2. Don't appear to be part of a bold pattern
+        return text.replace(/"[^"]*"/g, match =>
+            match.replace(/\b\*(?!\*)|(?<!\*)\*\b/g, '')
+        );
+    }
+
+    /**
+     * Stage 4.2: Clean up spaces between asterisks and text
      * Fixes cases where there are unnecessary spaces between emphasis markers and text
      * Example: "* text *" becomes "*text*"
      */
@@ -294,7 +294,7 @@ class TextProcessor {
     }
 
     /**
-     * Stage 4.6: Clean up spaces between quotation marks and text
+     * Stage 4.3: Clean up spaces between quotation marks and text
      * Fixes cases where there are unnecessary spaces between quotes and text
      * Example: '" text "' becomes '"text"'
      */
