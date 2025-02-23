@@ -210,8 +210,8 @@ class TextProcessor {
         }
 
         // Then find unpaired double asterisks in the remaining text
-        const startAsterisks = result.match(/\*\*[\w'-]+/g);
-        const endAsterisks = result.match(/[\w'-]+\*\*/g);
+            const startAsterisks = result.match(/\*\*([\w'"-]+[?!.]?)/g);
+            const endAsterisks = result.match(/([\w'"-]+[?!.]?)\*\*/g);
         
         if (startAsterisks) allMatches = allMatches.concat(startAsterisks);
         if (endAsterisks) allMatches = allMatches.concat(endAsterisks);
