@@ -82,7 +82,10 @@ class TextProcessor {
 
             // Stage 4.2: Clean up spaces between asterisks and text
             result = this.cleanupAsteriskSpacing(result);
-            
+
+            // Stage 4.6: Clean up spaces between quotes and text
+            result = this.cleanupQuoteSpacing(result);
+
             // Stage 5: Process narrative sections
             result = this.processNarrative(result);
             
@@ -287,6 +290,20 @@ class TextProcessor {
             const hasSpaceBefore = match.startsWith(' ');
             const hasSpaceAfter = match.endsWith(' ');
             return (hasSpaceBefore ? ' ' : '') + '*' + content.trim() + '*' + (hasSpaceAfter ? ' ' : '');
+        });
+    }
+
+    /**
+     * Stage 4.6: Clean up spaces between quotation marks and text
+     * Fixes cases where there are unnecessary spaces between quotes and text
+     * Example: '" text "' becomes '"text"'
+     */
+    cleanupQuoteSpacing(text) {
+        return text.replace(/(?<![\S])"\s*([^"]+?)\s*"(?![\S])/g, (match, content) => {
+            // Preserve any spaces before/after the section while cleaning internal spaces
+            const hasSpaceBefore = match.startsWith(' ');
+            const hasSpaceAfter = match.endsWith(' ');
+            return (hasSpaceBefore ? ' ' : '') + '"' + content.trim() + '"' + (hasSpaceAfter ? ' ' : '');
         });
     }
 
@@ -577,7 +594,21 @@ class TextProcessor {
                     type: 'code'
                 });
             }
-            // Check for think tags
+            // Check for lone closing think tag first
+            else if (char === '<' && i + 7 < text.length && text.slice(i, i + 8) === '</think>') {
+                // Capture all text from start of buffer up to and including the tag
+                let thinkBuffer = buffer + '</think>';
+                i += 7;  // Move past '</think>'
+                
+                pushBuffer();  // Push content as think block
+                sections.push({
+                    raw: thinkBuffer,
+                    text: thinkBuffer,
+                    type: 'code'  // Reuse code type since we want the same behavior
+                });
+                buffer = '';  // Clear buffer since we've processed everything
+            }
+            // Check for complete think tags
             else if (char === '<' && i + 6 < text.length && text.slice(i, i + 7) === '<think>') {
                 let thinkBuffer = '<think>';
                 i += 6;  // Move past '<think>'
