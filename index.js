@@ -79,7 +79,10 @@ class TextProcessor {
 
             // Stage 4.5: Clean up spaces between asterisks and text
             result = this.cleanupAsteriskSpacing(result);
-            
+
+            // Stage 4.6: Clean up spaces between quotes and text
+            result = this.cleanupQuoteSpacing(result);
+
             // Stage 5: Process narrative sections
             result = this.processNarrative(result);
             
@@ -183,6 +186,20 @@ class TextProcessor {
             const hasSpaceBefore = match.startsWith(' ');
             const hasSpaceAfter = match.endsWith(' ');
             return (hasSpaceBefore ? ' ' : '') + '*' + content.trim() + '*' + (hasSpaceAfter ? ' ' : '');
+        });
+    }
+
+    /**
+     * Stage 4.6: Clean up spaces between quotation marks and text
+     * Fixes cases where there are unnecessary spaces between quotes and text
+     * Example: '" text "' becomes '"text"'
+     */
+    cleanupQuoteSpacing(text) {
+        return text.replace(/(?<![\S])"\s*([^"]+?)\s*"(?![\S])/g, (match, content) => {
+            // Preserve any spaces before/after the section while cleaning internal spaces
+            const hasSpaceBefore = match.startsWith(' ');
+            const hasSpaceAfter = match.endsWith(' ');
+            return (hasSpaceBefore ? ' ' : '') + '"' + content.trim() + '"' + (hasSpaceAfter ? ' ' : '');
         });
     }
 
