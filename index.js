@@ -111,8 +111,8 @@ class TextProcessor {
             // Double quotes (including fullwidth and ornamental variants)
             .replace(/[\u00AB\u00BB\u201C\u201D\u02BA\u02EE\u201F\u275D\u275E\u301D\u301E\uFF02]/g, '"')
             
-            // Single quotes and apostrophes (including modifiers and accents)
-            .replace(/[\u2018\u2019\u02BB\u02C8\u02BC\u02BD\u02B9\u201B\uFF07\u00B4\u02CA\u0060\u02CB\u275B\u275C\u0313\u0314]/g, "'")
+            // Single quotes and apostrophes (Not including backticks/graves)
+            .replace(/[\u2018\u2019\u02BB\u02C8\u02BC\u02BD\u02B9\u201B\uFF07\u02CA\u275B\u275C\u0313\u0314]/g, "'")
             
             // Dashes and hyphens (preserving em dash)
             .replace(/[\u2010\u2043\u23BC\u23BD\uFE63\uFF0D]/g, '-')
@@ -210,8 +210,8 @@ class TextProcessor {
         }
 
         // Then find unpaired double asterisks in the remaining text
-            const startAsterisks = result.match(/\*\*([\w'"-]+[?!.]?)/g);
-            const endAsterisks = result.match(/([\w'"-]+[?!.]?)\*\*/g);
+        const startAsterisks = result.match(/\*\*([\w'"-]+[?!.]?)/g);
+        const endAsterisks = result.match(/([\w'"-]+[?!.]?)\*\*/g);
         
         if (startAsterisks) allMatches = allMatches.concat(startAsterisks);
         if (endAsterisks) allMatches = allMatches.concat(endAsterisks);
