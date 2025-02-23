@@ -173,6 +173,58 @@ class TextProcessor {
     }
 
     /**
+     * Stage 4.3: Clean up unpaired double asterisks within text
+     * Uses string traversal to find and remove orphaned ** markers
+     * while preserving properly matched pairs.
+     * Called after cleanupLoneAsterisks to handle cases within dialogue.
+     * Also called as a helper method within processNarrative.
+     */
+    cleanupUnpairedDoubleAsterisks(text) {
+        let result = '';
+        let i = 0;
+        
+        while (i < text.length) {
+            // Found potential double asterisk
+            if (i + 1 < text.length && text[i] === '*' && text[i + 1] === '*') {
+                // Look ahead for matching pair
+                let found = false;
+                let searchPos = i + 2;
+                let matchEnd = -1;
+                
+                while (searchPos < text.length - 1) {
+                    // Found potential match
+                    if (text[searchPos] === '*' && text[searchPos + 1] === '*') {
+                        // Check if there's text content between the pairs
+                        const between = text.substring(i + 2, searchPos).trim();
+                        if (between.length > 0 && !between.includes('**')) {
+                            found = true;
+                            matchEnd = searchPos + 2;
+                        }
+                        break;
+                    }
+                    searchPos++;
+                }
+                
+                if (found) {
+                    // Keep the entire matched section (opening **, content, and closing **)
+                    result += text.substring(i, matchEnd);
+                    i = matchEnd;
+                } else {
+                    // Skip the unpaired double asterisk
+                    i += 2;
+                }
+                continue;
+            }
+            
+            // Normal character
+            result += text[i];
+            i++;
+        }
+        
+        return result;
+    }
+
+    /**
      * Stage 4.5: Clean up spaces between asterisks and text
      * Fixes cases where there are unnecessary spaces between emphasis markers and text
      * Example: "* text *" becomes "*text*"
@@ -212,24 +264,27 @@ class TextProcessor {
                 result += section.raw;
             }
             else {
-                // Handle narrative sections
-                if (!this.isItalicized(section.text)) {
+                // Clean up any unpaired double asterisks first
+                let cleanedText = this.cleanupUnpairedDoubleAsterisks(section.raw);
+                
+                // Then handle narrative formatting
+                if (!this.isItalicized(cleanedText.trim())) {
                     // When adding start asterisk, also add space if needed
-                    if (!section.text.startsWith('*')) {
+                    if (!cleanedText.startsWith('*')) {
                         if (result && !result.endsWith(' ') && !result.endsWith('\n')) result += ' ';
                         result += '*';
                     }
                     
-                    result += section.text;
+                    result += cleanedText;
                     
                     // When adding end asterisk, also add space if needed
-                    if (!section.text.endsWith('*')) {
+                    if (!cleanedText.endsWith('*')) {
                         result += '*';
-                        if (i < sections.length - 1 && !section.text.endsWith(' ') && sections[i + 1].type !== 'newline') result += ' ';
+                        if (i < sections.length - 1 && !cleanedText.endsWith(' ') && sections[i + 1].type !== 'newline') result += ' ';
                     }
                 } else {
                     // Already properly emphasized - preserve original spacing
-                    result += section.raw;
+                    result += cleanedText;
                 }
             }
         }
