@@ -73,11 +73,14 @@ class TextProcessor {
             
             // Stage 3: Clean up any triple asterisks
             result = this.cleanupTripleAsterisks(result);
+
+            // Stage 4: Clean up unpaired double asterisks within text
+            result = this.cleanupUnpairedDoubleAsterisks(result);
             
-            // Stage 4: Clean up lone asterisks in quotes
+            // Stage 4.1: Clean up lone asterisks in quotes
             result = this.cleanupLoneAsterisks(result);
 
-            // Stage 4.5: Clean up spaces between asterisks and text
+            // Stage 4.2: Clean up spaces between asterisks and text
             result = this.cleanupAsteriskSpacing(result);
             
             // Stage 5: Process narrative sections
@@ -180,46 +183,70 @@ class TextProcessor {
      * Also called as a helper method within processNarrative.
      */
     cleanupUnpairedDoubleAsterisks(text) {
-        let result = '';
-        let i = 0;
-        
-        while (i < text.length) {
-            // Found potential double asterisk
-            if (i + 1 < text.length && text[i] === '*' && text[i + 1] === '*') {
-                // Look ahead for matching pair
-                let found = false;
-                let searchPos = i + 2;
-                let matchEnd = -1;
-                
-                while (searchPos < text.length - 1) {
-                    // Found potential match
-                    if (text[searchPos] === '*' && text[searchPos + 1] === '*') {
-                        // Check if there's text content between the pairs
-                        const between = text.substring(i + 2, searchPos).trim();
-                        if (between.length > 0 && !between.includes('**')) {
-                            found = true;
-                            matchEnd = searchPos + 2;
-                        }
-                        break;
-                    }
-                    searchPos++;
-                }
-                
-                if (found) {
-                    // Keep the entire matched section (opening **, content, and closing **)
-                    result += text.substring(i, matchEnd);
-                    i = matchEnd;
-                } else {
-                    // Skip the unpaired double asterisk
-                    i += 2;
-                }
-                continue;
-            }
-            
-            // Normal character
-            result += text[i];
-            i++;
+        let result = text;
+        let allMatches = [];
+
+        // First find complete pairs (only matching word content)
+        const completePairs = result.match(/\*\*([\w'-]+)\*\*/g);
+        if (completePairs) {
+            allMatches = allMatches.concat(completePairs);
+            // Remove complete pairs from working text
+            result = result.replace(/\*\*([\w'-]+)\*\*/g, '');
         }
+
+        // Then find unpaired double asterisks in the remaining text
+        const startAsterisks = result.match(/\*\*[\w'-]+/g);
+        const endAsterisks = result.match(/[\w'-]+\*\*/g);
+        
+        if (startAsterisks) allMatches = allMatches.concat(startAsterisks);
+        if (endAsterisks) allMatches = allMatches.concat(endAsterisks);
+
+        if (!allMatches.length) return text;
+        result = text;  // Reset result to original text for final processing
+
+        // Process each match
+        allMatches.forEach(match => {
+            let cleaned = '';
+            let i = 0;
+            
+            while (i < match.length) {
+                if (i + 1 < match.length && match[i] === '*' && match[i + 1] === '*') {
+                    // Look ahead for matching pair
+                    let found = false;
+                    let searchPos = i + 2;
+                    let matchEnd = -1;
+                    
+                    while (searchPos < match.length - 1) {
+                        if (match[searchPos] === '*' && match[searchPos + 1] === '*') {
+                            const between = match.substring(i + 2, searchPos).trim();
+                            if (between.length > 0 && !between.includes('**')) {
+                                found = true;
+                                matchEnd = searchPos + 2;
+                            }
+                            break;
+                        }
+                        searchPos++;
+                    }
+                    
+                    if (found) {
+                        // Keep complete pairs
+                        cleaned += match.substring(i, matchEnd);
+                        i = matchEnd;
+                    } else {
+                        // Skip unpaired double asterisk
+                        i += 2;
+                    }
+                    continue;
+                }
+                
+                cleaned += match[i];
+                i++;
+            }
+
+            if (match !== cleaned) {
+                result = result.replace(match, cleaned);
+            }
+        });
         
         return result;
     }
@@ -264,27 +291,24 @@ class TextProcessor {
                 result += section.raw;
             }
             else {
-                // Clean up any unpaired double asterisks first
-                let cleanedText = this.cleanupUnpairedDoubleAsterisks(section.raw);
-                
-                // Then handle narrative formatting
-                if (!this.isItalicized(cleanedText.trim())) {
+                // Handle narrative sections
+                if (!this.isItalicized(section.text)) {
                     // When adding start asterisk, also add space if needed
-                    if (!cleanedText.startsWith('*')) {
+                    if (!section.text.startsWith('*')) {
                         if (result && !result.endsWith(' ') && !result.endsWith('\n')) result += ' ';
                         result += '*';
                     }
                     
-                    result += cleanedText;
+                    result += section.text;
                     
                     // When adding end asterisk, also add space if needed
-                    if (!cleanedText.endsWith('*')) {
+                    if (!section.text.endsWith('*')) {
                         result += '*';
-                        if (i < sections.length - 1 && !cleanedText.endsWith(' ') && sections[i + 1].type !== 'newline') result += ' ';
+                        if (i < sections.length - 1 && !section.text.endsWith(' ') && sections[i + 1].type !== 'newline') result += ' ';
                     }
                 } else {
                     // Already properly emphasized - preserve original spacing
-                    result += cleanedText;
+                    result += section.raw;
                 }
             }
         }
