@@ -59,8 +59,8 @@ class TextProcessor {
         try {
             let result = text;
             
-            // Stage 0: Normalize smart quotes to regular quotes
-            result = this.normalizeQuotes(result);
+            // Stage 0: Normalize all "smart" characters to regular characters
+            result = this.normalizeSmartCharacters(result);
             
             // Stage 1: Process quotes (keep the working version)
             result = this.processQuotes(result);
@@ -100,13 +100,38 @@ class TextProcessor {
     }
 
     /**
-     * Stage 0: Normalize smart quotes to regular quotes
-     * Converts both opening (“) and closing (”) smart quotes to regular quotes (")
+     * Stage 0: Normalize smart characters
+     * Converts various smart typography characters to their basic ASCII equivalents
      */
-    normalizeQuotes(text) {
-        return text.replace(/[“”]/g, '"');
+    normalizeSmartCharacters(text) {
+        return text
+            // Double quotes (including fullwidth and ornamental variants)
+            .replace(/[\u00AB\u00BB\u201C\u201D\u02BA\u02EE\u201F\u275D\u275E\u301D\u301E\uFF02]/g, '"')
+            
+            // Single quotes and apostrophes (including modifiers and accents)
+            .replace(/[\u2018\u2019\u02BB\u02C8\u02BC\u02BD\u02B9\u201B\uFF07\u00B4\u02CA\u0060\u02CB\u275B\u275C\u0313\u0314]/g, "'")
+            
+            // Dashes and hyphens (preserving em dash)
+            .replace(/[\u2010\u2043\u23BC\u23BD\uFE63\uFF0D]/g, '-')
+            .replace(/\u2013/g, '-')  // en dash to hyphen
+            .replace(/\u2015/g, '\u2014')  // horizontal bar to em dash
+            
+            // Ellipsis
+            .replace(/\u2026/g, '...')
+            
+            // Various spaces
+            .replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000\uFEFF]/g, ' ')
+            
+            // Bullets and decorative characters
+            .replace(/[\u2022\u2043\u2219\u25D8\u25E6\u2619\u2765\u2767]/g, '*')
+            
+            // Angle quotes (guillemets)
+            .replace(/[\u2039\u203A\u00AB\u00BB]/g, '"')
+            
+            // Swung dash
+            .replace(/\u2053/g, '~');
     }
-
+    
     /**
      * Stage 1: Process quotes
      * Only removes asterisks that directly wrap quotes
