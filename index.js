@@ -269,9 +269,12 @@ class TextProcessor {
         // 1. Have a word character, punctuation, or space on one side only
         // 2. Don't appear to be part of a bold pattern
         return text.replace(/"[^"]*"/g, match =>
-            match.replace(/(?:[\w\s.,!?'"-])\*(?!\*)|\*(?![\s*])(?:[\w\s.,!?'"-])/g, match => 
+            // First handle the asterisk cleanup
+            match.replace(/(?:\b|\s|[.,!?])\*(?!\*)|(?<!\*)\*(?:\b|\s|[.,!?])/g, match => 
                 match.replace('*', '')
             )
+            // Then normalize multiple spaces to single spaces
+            .replace(/\s{2,}/g, ' ')
         );
     }
 
