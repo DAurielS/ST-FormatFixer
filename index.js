@@ -1,12 +1,5 @@
-import { extension_settings, getContext } from "../../../extensions.js";
 import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
 import { SlashCommand } from "../../../slash-commands/SlashCommand.js";
-import {
-    ARGUMENT_TYPE,
-    SlashCommandArgument,
-    SlashCommandNamedArgument,
-} from '../../../slash-commands/SlashCommandArgument.js';
-import { ToolManager } from '../../../tool-calling.js';
 
 // Extension name
 const extensionName = "ST-FormatFixer";
@@ -179,7 +172,7 @@ class TextProcessor {
     processNestedEmphasis(text) {
         // Convert single-word italics to bold
         // Only match actual words (letters, numbers, and allowed punctuation)
-        return text.replace(/\*([\w'-]+)\*/g, '**$1**');
+        return text.replace(/\*([\w'-]+[?!./,\\]?)\*/g, '**$1**');
     }
 
     /**
@@ -202,16 +195,16 @@ class TextProcessor {
         let allMatches = [];
 
         // First find complete pairs (only matching word content)
-        const completePairs = result.match(/\*\*([\w'-]+)\*\*/g);
+        const completePairs = result.match(/\*\*([\w'-]+[?!./,\\]?)\*\*/g);
         if (completePairs) {
             allMatches = allMatches.concat(completePairs);
             // Remove complete pairs from working text
-            result = result.replace(/\*\*([\w'-]+)\*\*/g, '');
+            result = result.replace(/\*\*([\w'-]+[?!./,\\]?)\*\*/g, '');
         }
 
         // Then find unpaired double asterisks in the remaining text
-        const startAsterisks = result.match(/\*\*([\w'"-]+[?!.]?)/g);
-        const endAsterisks = result.match(/([\w'"-]+[?!.]?)\*\*/g);
+        const startAsterisks = result.match(/\*\*([\w'"-]+[?!./,\\]?)/g);
+        const endAsterisks = result.match(/([\w'"-]+[?!./,\\]?)\*\*/g);
         
         if (startAsterisks) allMatches = allMatches.concat(startAsterisks);
         if (endAsterisks) allMatches = allMatches.concat(endAsterisks);
@@ -269,13 +262,16 @@ class TextProcessor {
     /**
      * Stage 4.1: Clean up lone asterisks within quotes
      * Only removes asterisks that appear to be broken formatting
+     * Handles cases with punctuation like ellipsis, periods, etc.
      */
     cleanupLoneAsterisks(text) {
         // Specifically target asterisks within quotes that:
-        // 1. Have a word character on one side only
+        // 1. Have a word character, punctuation, or space on one side only
         // 2. Don't appear to be part of a bold pattern
         return text.replace(/"[^"]*"/g, match =>
-            match.replace(/\b\*(?!\*)|(?<!\*)\*\b/g, '')
+            match.replace(/(?:[\w\s.,!?'"-])\*(?!\*)|\*(?![\s*])(?:[\w\s.,!?'"-])/g, match => 
+                match.replace('*', '')
+            )
         );
     }
 
