@@ -64,8 +64,8 @@ class TextProcessor {
             // Stage 2: Convert single-word italics to bold
             result = this.processNestedEmphasis(result);
             
-            // Stage 3: Clean up any triple asterisks
-            result = this.cleanupTripleAsterisks(result);
+            // Stage 3: Clean up any quadruple asterisks
+            result = this.cleanupQuadrupleAsterisks(result);
 
             // Stage 4: Clean up unpaired double asterisks within text
             result = this.cleanupUnpairedDoubleAsterisks(result);
@@ -172,15 +172,15 @@ class TextProcessor {
     processNestedEmphasis(text) {
         // Convert single-word italics to bold
         // Only match actual words (letters, numbers, and allowed punctuation)
-        return text.replace(/\*([\w'-]+[?!./,:\\]?)\*/g, '**$1**');
+        return text.replace(/(?<!\*)\*([\w'-]+[?!./,:\\]?)\*(?!\*)/g, '**$1**');
     }
 
     /**
-     * Stage 3: Clean up triple asterisks
-     * Replaces any sequence of 3 or more asterisks with 2 asterisks
+     * Stage 3: Clean up quadruple asterisks
+     * Replaces any sequence of 4 or more asterisks with 3 asterisks
      */
-    cleanupTripleAsterisks(text) {
-        return text.replace(/\*{3,}/g, '**');
+    cleanupQuadrupleAsterisks(text) {
+        return text.replace(/\*{4,}/g, '***');
     }
 
     /**
