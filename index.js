@@ -46,30 +46,87 @@ const TEST_CASES = {
 class TextProcessor {
     constructor() {
         this.debugLog = [];
+        this.thinkBlockPlaceholderPrefix = "__THINK_BLOCK_PLACEHOLDER_";
+        this.thinkBlockPlaceholderSuffix = "__";
+    }
+
+    /**
+     * Extracts <think> blocks and replaces them with unique placeholders.
+     * Handles both closed <think>...</think> and unclosed <think>...EOF.
+     * @param {string} text The input text.
+     * @returns {{text: string, thinkBlocks: Map<string, string>}} Object with text containing placeholders and a map of placeholders to original content.
+     */
+    handleThinkBlocks(text) {
+        const thinkBlocks = new Map();
+        let processedText = text;
+        let index = 0;
+
+        // Regex to find <think>...</think> (non-greedy, global, multiline)
+        const closedThinkRegex = /<think>(.*?)<\/think>/gs;
+        processedText = processedText.replace(closedThinkRegex, (match) => {
+            const placeholder = `${this.thinkBlockPlaceholderPrefix}${index}${this.thinkBlockPlaceholderSuffix}`;
+            thinkBlocks.set(placeholder, match); // Store the full tag and content
+            index++;
+            return placeholder;
+        });
+
+        // Check for unclosed <think> tag at the end of the text
+        // This regex matches <think> followed by any characters until the end of the string
+        const unclosedThinkMatch = processedText.match(/<think>(.*)$/s);
+        if (unclosedThinkMatch) {
+            const fullMatch = unclosedThinkMatch[0];
+            const placeholder = `${this.thinkBlockPlaceholderPrefix}${index}${this.thinkBlockPlaceholderSuffix}`;
+            thinkBlocks.set(placeholder, fullMatch); // Store the tag and content to EOF
+            // Replace the unclosed tag and everything after it with the placeholder
+            processedText = processedText.replace(/<think>(.*)$/s, placeholder);
+        }
+
+        return { text: processedText, thinkBlocks };
+    }
+
+    /**
+     * Restores original <think> blocks by replacing placeholders.
+     * @param {string} text The text containing placeholders.
+     * @param {Map<string, string>} thinkBlocks Map of placeholders to original content.
+     * @returns {string} The text with original <think> blocks restored.
+     */
+    restoreThinkBlocks(text, thinkBlocks) {
+        let result = text;
+        // Replace placeholders with original content
+        for (const [placeholder, originalContent] of thinkBlocks.entries()) {
+            // Use a regex with global flag to replace all occurrences
+            // Escape placeholder string for use in regex
+            const escapedPlaceholder = placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const placeholderRegex = new RegExp(escapedPlaceholder, 'g');
+            result = result.replace(placeholderRegex, originalContent);
+        }
+        return result;
     }
 
     processText(text) {
         try {
-            let result = text;
-            
+            // Pre-processing: Handle <think> blocks - MUST be the first step
+            const { text: textWithPlaceholders, thinkBlocks } = this.handleThinkBlocks(text);
+            let result = textWithPlaceholders;
+
             // Stage 0: Normalize all "smart" characters to regular characters
             result = this.normalizeSmartCharacters(result);
-            
+
             // Stage 1: Process quotes (keep the working version)
             result = this.processQuotes(result);
 
             // Stage 1.5: Cleanup consecutive double quotes
             result = this.cleanupConsecutiveQuotes(result);
-            
+
             // Stage 2: Convert single-word italics to bold
             result = this.processNestedEmphasis(result);
-            
+
             // Stage 3: Clean up any quadruple asterisks
             result = this.cleanupQuadrupleAsterisks(result);
 
             // Stage 4: Clean up unpaired double asterisks within text
             result = this.cleanupUnpairedDoubleAsterisks(result);
-            
+
             // Stage 4.1: Clean up lone asterisks in quotes
             result = this.cleanupLoneAsterisks(result);
 
@@ -81,13 +138,16 @@ class TextProcessor {
 
             // Stage 5: Process narrative sections
             result = this.processNarrative(result);
-            
+
             // Stage 6: Clean up any excessive newlines
             result = this.cleanupExcessNewlines(result);
-            
+
             // Stage 7: Merge nested emphasis
             result = this.mergeNestedEmphasis(result);
-            
+
+            // Post-processing: Restore <think> blocks - MUST be the last step
+            result = this.restoreThinkBlocks(result, thinkBlocks);
+
             return result;
         } catch (error) {
             console.error('Format Fixer error:', error);
@@ -557,12 +617,30 @@ class TextProcessor {
         
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
-            
-            // Check for code blocks first
+
+            // Check for think block placeholders first
+            const placeholderRegex = new RegExp(`${this.thinkBlockPlaceholderPrefix}\\d+${this.thinkBlockPlaceholderSuffix}`);
+            const remainingText = text.substring(i);
+            const placeholderMatch = remainingText.match(placeholderRegex);
+
+            if (placeholderMatch && placeholderMatch.index === 0) {
+                // Found a placeholder
+                const placeholder = placeholderMatch[0];
+                pushBuffer(); // Push any content before the placeholder
+                sections.push({
+                    raw: placeholder,
+                    text: placeholder,
+                    type: 'code' // Mark as code to be ignored by processNarrative
+                });
+                i += placeholder.length - 1; // Move index past the placeholder
+                continue; // Continue to the next character after the placeholder
+            }
+
+            // Check for code blocks
             if (char === '`') {
                 // Found potential code block
                 let codeBuffer = char;
-                
+
                 // Check if it's a triple backtick
                 let isTriple = false;
                 if (i + 2 < text.length && text[i + 1] === '`' && text[i + 2] === '`') {
@@ -570,7 +648,7 @@ class TextProcessor {
                     isTriple = true;
                     i += 2;
                 }
-                
+
                 // Capture everything until closing backticks
                 i++;
                 while (i < text.length) {
@@ -585,50 +663,12 @@ class TextProcessor {
                     }
                     i++;
                 }
-                
+
                 pushBuffer();  // Push any content before the code block
                 sections.push({
                     raw: codeBuffer,
                     text: codeBuffer,
                     type: 'code'
-                });
-            }
-            // Check for lone closing think tag first
-            else if (char === '<' && i + 7 < text.length && text.slice(i, i + 8) === '</think>') {
-                // Capture all text from start of buffer up to and including the tag
-                let thinkBuffer = buffer + '</think>';
-                i += 7;  // Move past '</think>'
-                
-                pushBuffer();  // Push content as think block
-                sections.push({
-                    raw: thinkBuffer,
-                    text: thinkBuffer,
-                    type: 'code'  // Reuse code type since we want the same behavior
-                });
-                buffer = '';  // Clear buffer since we've processed everything
-            }
-            // Check for complete think tags
-            else if (char === '<' && i + 6 < text.length && text.slice(i, i + 7) === '<think>') {
-                let thinkBuffer = '<think>';
-                i += 6;  // Move past '<think>'
-                
-                // Capture everything until closing tag
-                i++;
-                while (i < text.length) {
-                    if (text[i] === '<' && i + 7 < text.length && text.slice(i, i + 8) === '</think>') {
-                        thinkBuffer += '</think>';
-                        i += 7;  // Move past '</think>'
-                        break;
-                    }
-                    thinkBuffer += text[i];
-                    i++;
-                }
-                
-                pushBuffer();  // Push any content before the think block
-                sections.push({
-                    raw: thinkBuffer,
-                    text: thinkBuffer,
-                    type: 'code'  // Reuse code type since we want the same behavior
                 });
             }
             // Check for CYOA-style lines at line start
@@ -638,10 +678,10 @@ class TextProcessor {
                     /[.>)]/.test(text[i + 1])) {
                 // Found a CYOA-style line
                 pushBuffer();  // Push any content before
-                
+
                 let cyoaBuffer = char + text[i + 1];  // Add the number/letter and delimiter
                 i++;  // Move past delimiter
-                
+
                 // Capture the rest of the line
                 i++;
                 while (i < text.length && text[i] !== '\n') {
@@ -651,7 +691,7 @@ class TextProcessor {
                 if (i < text.length) {
                     cyoaBuffer += text[i];  // Include the newline
                 }
-                
+
                 sections.push({
                     raw: cyoaBuffer,
                     text: cyoaBuffer,
@@ -662,16 +702,16 @@ class TextProcessor {
             else if (char === '*') {
                 buffer += char;
             }
-            
+
             else if (char === '"' && !this.isWithinEmphasis(text, i)) {
                 pushBuffer();
-                
+
                 // Check for a single space before the quote
                 let leadingSpace = (i > 0 && text[i - 1] === ' ') ? ' ' : '';
-                
+
                 // Add quote with optional leading space
                 let quoteBuffer = leadingSpace + char;
-                
+
                 // Capture the quote content
                 i++;
                 while (i < text.length && text[i] !== '"') {
@@ -679,13 +719,13 @@ class TextProcessor {
                     i++;
                 }
                 if (i < text.length) quoteBuffer += text[i];
-                
+
                 // Check for a single trailing space
                 if (i + 1 < text.length && text[i + 1] === ' ') {
                     quoteBuffer += ' ';
                     i++; // Move past the space
                 }
-                
+
                 sections.push({
                     raw: quoteBuffer,
                     text: quoteBuffer.trim(),
@@ -696,14 +736,14 @@ class TextProcessor {
                 // End current section at newline
                 buffer += char;
                 pushBuffer();
-                
+
                 // Count consecutive newlines
                 let newlineCount = 1;
                 while (i + 1 < text.length && text[i + 1] === '\n') {
                     newlineCount++;
                     i++;
                 }
-                
+
                 // Always create a newline section
                 sections.push({
                     raw: newlineCount > 1 ? '\n\n' : '\n',  // Preserve single newlines, normalize multiples to double
@@ -715,7 +755,7 @@ class TextProcessor {
                 buffer += char;
             }
         }
-        
+
         pushBuffer();
         return sections.filter(s => s.text || s.type === 'newline');
     }
