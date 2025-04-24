@@ -46,54 +46,67 @@ const TEST_CASES = {
 class TextProcessor {
     constructor() {
         this.debugLog = [];
-        this.thinkBlockPlaceholderPrefix = "__THINK_BLOCK_PLACEHOLDER_";
-        this.thinkBlockPlaceholderSuffix = "__";
+        this.protectedBlockPlaceholderPrefix = "__PROTECTED_BLOCK_PLACEHOLDER_"; // Generic prefix
+        this.protectedBlockPlaceholderSuffix = "__";
     }
 
     /**
-     * Extracts <think> blocks and replaces them with unique placeholders.
+     * Extracts protected blocks (<think>, Message # tags) and replaces them with unique placeholders.
      * Handles both closed <think>...</think> and unclosed <think>...EOF.
+     * Handles Message Number tags at the start of lines.
      * @param {string} text The input text.
-     * @returns {{text: string, thinkBlocks: Map<string, string>}} Object with text containing placeholders and a map of placeholders to original content.
+     * @returns {{text: string, protectedBlocks: Map<string, string>}} Object with text containing placeholders and a map of placeholders to original content.
      */
-    handleThinkBlocks(text) {
-        const thinkBlocks = new Map();
+    extractProtectedBlocks(text) {
+        const protectedBlocks = new Map();
         let processedText = text;
         let index = 0;
+        const generatePlaceholder = () => `${this.protectedBlockPlaceholderPrefix}${index++}${this.protectedBlockPlaceholderSuffix}`;
 
-        // Regex to find <think>...</think> (non-greedy, global, multiline)
+        // 1. Extract <think>...</think> blocks
         const closedThinkRegex = /<think>(.*?)<\/think>/gs;
         processedText = processedText.replace(closedThinkRegex, (match) => {
-            const placeholder = `${this.thinkBlockPlaceholderPrefix}${index}${this.thinkBlockPlaceholderSuffix}`;
-            thinkBlocks.set(placeholder, match); // Store the full tag and content
-            index++;
+            const placeholder = generatePlaceholder();
+            protectedBlocks.set(placeholder, match); // Store the full tag and content
             return placeholder;
         });
 
         // Check for unclosed <think> tag at the end of the text
         // This regex matches <think> followed by any characters until the end of the string
+        // 2. Extract unclosed <think>...EOF blocks
         const unclosedThinkMatch = processedText.match(/<think>(.*)$/s);
         if (unclosedThinkMatch) {
             const fullMatch = unclosedThinkMatch[0];
-            const placeholder = `${this.thinkBlockPlaceholderPrefix}${index}${this.thinkBlockPlaceholderSuffix}`;
-            thinkBlocks.set(placeholder, fullMatch); // Store the tag and content to EOF
+            const placeholder = generatePlaceholder();
+            protectedBlocks.set(placeholder, fullMatch); // Store the tag and content to EOF
             // Replace the unclosed tag and everything after it with the placeholder
             processedText = processedText.replace(/<think>(.*)$/s, placeholder);
         }
 
-        return { text: processedText, thinkBlocks };
+        // 3. Extract "Message #X: " tags at the start of lines
+        const messageNumRegex = /^(.*? Message #\d+: )/gm; // Use multiline flag
+        processedText = processedText.replace(messageNumRegex, (match, group1) => {
+            // group1 contains the matched tag, e.g., "User Message #1: "
+            const placeholder = generatePlaceholder();
+            protectedBlocks.set(placeholder, group1); // Store the matched tag
+            return placeholder; // Replace the tag with the placeholder
+        });
+
+        return { text: processedText, protectedBlocks };
     }
 
     /**
-     * Restores original <think> blocks by replacing placeholders.
+     * Restores original protected blocks by replacing placeholders.
      * @param {string} text The text containing placeholders.
-     * @param {Map<string, string>} thinkBlocks Map of placeholders to original content.
-     * @returns {string} The text with original <think> blocks restored.
+     * @param {Map<string, string>} protectedBlocks Map of placeholders to original content.
+     * @returns {string} The text with original blocks restored.
      */
-    restoreThinkBlocks(text, thinkBlocks) {
+    restoreProtectedBlocks(text, protectedBlocks) {
         let result = text;
         // Replace placeholders with original content
-        for (const [placeholder, originalContent] of thinkBlocks.entries()) {
+        // Iterate in reverse order of keys (indices) might be safer if placeholders could somehow nest, though unlikely here.
+        // However, simple iteration should be fine given the generation method.
+        for (const [placeholder, originalContent] of protectedBlocks.entries()) {
             // Use a regex with global flag to replace all occurrences
             // Escape placeholder string for use in regex
             const escapedPlaceholder = placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
@@ -105,8 +118,8 @@ class TextProcessor {
 
     processText(text) {
         try {
-            // Pre-processing: Handle <think> blocks - MUST be the first step
-            const { text: textWithPlaceholders, thinkBlocks } = this.handleThinkBlocks(text);
+            // Pre-processing: Handle protected blocks - MUST be the first step
+            const { text: textWithPlaceholders, protectedBlocks } = this.extractProtectedBlocks(text);
             let result = textWithPlaceholders;
 
             // Stage 0: Normalize all "smart" characters to regular characters
@@ -145,8 +158,8 @@ class TextProcessor {
             // Stage 7: Merge nested emphasis
             result = this.mergeNestedEmphasis(result);
 
-            // Post-processing: Restore <think> blocks - MUST be the last step
-            result = this.restoreThinkBlocks(result, thinkBlocks);
+            // Post-processing: Restore protected blocks - MUST be the last step
+            result = this.restoreProtectedBlocks(result, protectedBlocks);
 
             return result;
         } catch (error) {
@@ -618,13 +631,13 @@ class TextProcessor {
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
 
-            // Check for think block placeholders first
-            const placeholderRegex = new RegExp(`${this.thinkBlockPlaceholderPrefix}\\d+${this.thinkBlockPlaceholderSuffix}`);
+            // Check for protected block placeholders first
+            const placeholderRegex = new RegExp(`${this.protectedBlockPlaceholderPrefix}\\d+${this.protectedBlockPlaceholderSuffix}`);
             const remainingText = text.substring(i);
             const placeholderMatch = remainingText.match(placeholderRegex);
 
             if (placeholderMatch && placeholderMatch.index === 0) {
-                // Found a placeholder
+                // Found a placeholder (either <think> or Message #)
                 const placeholder = placeholderMatch[0];
                 pushBuffer(); // Push any content before the placeholder
                 sections.push({
