@@ -118,6 +118,12 @@ class TextProcessor {
 
     processText(text) {
         try {
+            const context = SillyTavern.getContext();
+
+            if (context.characters[context.characterId].tags.includes("Assistant")) {
+                // If the character is an Assistant, skip processing
+                return text;
+            }
             // Pre-processing: Handle protected blocks - MUST be the first step
             const { text: textWithPlaceholders, protectedBlocks } = this.extractProtectedBlocks(text);
             let result = textWithPlaceholders;
