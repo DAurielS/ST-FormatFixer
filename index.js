@@ -92,6 +92,23 @@ class TextProcessor {
             return placeholder; // Replace the tag with the placeholder
         });
 
+        // 4. Extract square bracket blocks [...]
+        // Matches [content] including newlines, non-greedy
+        processedText = processedText.replace(/\[(.*?)\]/gs, (match) => {
+            const placeholder = generatePlaceholder();
+            protectedBlocks.set(placeholder, match);
+            return placeholder;
+        });
+
+        // 5. Extract unclosed square bracket blocks [...EOF
+        const unclosedSquareBracketMatch = processedText.match(/\[(.*)$/s);
+        if (unclosedSquareBracketMatch) {
+            const fullMatch = unclosedSquareBracketMatch[0];
+            const placeholder = generatePlaceholder();
+            protectedBlocks.set(placeholder, fullMatch);
+            processedText = processedText.replace(/\[(.*)$/s, placeholder);
+        }
+
         return { text: processedText, protectedBlocks };
     }
 
@@ -643,7 +660,7 @@ class TextProcessor {
             const placeholderMatch = remainingText.match(placeholderRegex);
 
             if (placeholderMatch && placeholderMatch.index === 0) {
-                // Found a placeholder (either <think> or Message #)
+                // Found a placeholder (either <think>, Message #, or square bracket)
                 const placeholder = placeholderMatch[0];
                 pushBuffer(); // Push any content before the placeholder
                 sections.push({
