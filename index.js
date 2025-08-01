@@ -141,14 +141,15 @@ class TextProcessor {
                 // If the character is an Assistant, skip processing
                 return text;
             }
-            // Pre-processing: Handle protected blocks - MUST be the first step
-            const { text: textWithPlaceholders, protectedBlocks } = this.extractProtectedBlocks(text);
-            let result = textWithPlaceholders;
+            // Applies to all text, even protected blocks
+            let result = this.uncensorText(text);
+
+            // Pre-processing: Handle protected blocks
+            const { text: textWithPlaceholders, protectedBlocks } = this.extractProtectedBlocks(result);
+            result = textWithPlaceholders;
 
             // Stage 0: Normalize all "smart" characters to regular characters
             result = this.normalizeSmartCharacters(result);
-
-            result = this.uncensorText(result);
 
             // Stage 1: Process quotes (keep the working version)
             result = this.processQuotes(result);
