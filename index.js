@@ -203,13 +203,21 @@ class TextProcessor {
         // Inverse map: 'c_ns_r_d version': 'word'
         const uncensorMap = new Map([
             ['p___nis', 'penis'],
+            ['p___is', 'penis'],
             ['v___ina', 'vagina'],
+            ['v___gina', 'vagina'],
+            ['p___sy', 'pussy'],
+            ['p___ssy', 'pussy'],
             ['p___y', 'pussy'],
             ['f___k', 'fuck'],
+            ['f___ck', 'fuck'],
             ['c___t', 'cunt'],
+            ['c___nt', 'cunt'],
             ['a___hole', 'asshole'],
             ['c___ck', 'cock'],
+            ['c___k', 'cock'],
             ['d___ck', 'dick'], 
+            ['d___k', 'dick'],
             ['s___x', 'sex'],
             ['c___m', 'cum'],
         ]);
