@@ -148,6 +148,8 @@ class TextProcessor {
             // Stage 0: Normalize all "smart" characters to regular characters
             result = this.normalizeSmartCharacters(result);
 
+            result = this.uncensorText(result);
+
             // Stage 1: Process quotes (keep the working version)
             result = this.processQuotes(result);
 
@@ -189,6 +191,65 @@ class TextProcessor {
             console.error('Format Fixer error:', error);
             return text;
         }
+    }
+
+    /**
+     * Uncensors text by replacing censored versions with original words.
+     * @param {string} text The input text potentially containing censored words.
+     * @returns {string} The uncensored text.
+     */
+    uncensorText(text) {
+        // Inverse map: 'c_ns_r_d version': 'word'
+        const uncensorMap = new Map([
+            ['p___nis', 'penis'],
+            ['v___ina', 'vagina'],
+            ['p___y', 'pussy'],
+            ['f___k', 'fuck'],
+            ['c___t', 'cunt'],
+            ['a___hole', 'asshole'],
+            ['c___ck', 'cock'],
+            ['d___ck', 'dick'], 
+            ['s___x', 'sex'],
+            ['c___m', 'cum'],
+        ]);
+
+        let result = text;
+
+        // Create a regex that matches all censored patterns from the uncensorMap keys
+        // Sort keys by length descending to ensure longer matches are attempted first
+        const censoredPatterns = Array.from(uncensorMap.keys())
+            .sort((a, b) => b.length - a.length)
+            .map(pattern => pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) // Escape regex special characters
+            .join('|');
+
+        if (censoredPatterns.length === 0) {
+            return text;
+        }
+
+        const uncensorRegex = new RegExp(`(${censoredPatterns})`, 'gi');
+
+        result = result.replace(uncensorRegex, (match) => {
+            const lowerCaseMatch = match.toLowerCase();
+            const originalWord = uncensorMap.get(lowerCaseMatch);
+
+            if (!originalWord) {
+                return match; // Should not happen if regex is built correctly from map keys
+            }
+
+            // Preserve original capitalization
+            // Case 1: ALL CAPS (e.g., "F__K" -> "FUCK")
+            if (match === match.toUpperCase()) {
+                return originalWord.toUpperCase();
+            }
+            // Case 2: Capitalized (e.g., "P___nis" -> "Penis")
+            if (match[0] === match[0].toUpperCase()) {
+                return originalWord.charAt(0).toUpperCase() + originalWord.slice(1);
+            }
+            // Case 3: all lowercase (e.g., "c___m" -> "cum")
+            return originalWord;
+        });
+
+        return result;
     }
 
     /**
