@@ -241,6 +241,8 @@ class TextProcessor {
             ['t___icle', 'testicle'],
             ['t___es', 'testes'],
             ['t___tes', 'testes'],
+            ['p___rn', 'porn'],
+            ['p___n', 'porn'],
         ]);
 
         let result = text;
