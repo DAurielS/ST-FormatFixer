@@ -237,6 +237,7 @@ class TextProcessor {
             ['n___ked', 'naked'],
             ['n___ed', 'naked'],
             ['n___de', 'nude'],
+            ['n___dity', 'nudity'],
             ['t___ticle', 'testicle'],
             ['t___icle', 'testicle'],
             ['t___es', 'testes'],
