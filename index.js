@@ -227,6 +227,7 @@ class TextProcessor {
             ['p___s', 'piss'],
             ['ur___ne', 'urine'],
             ['an___s', 'anus'],
+            ['an___l', 'anal'],
             ['r___ctum', 'rectum'],
             ['r___tum', 'rectum'],
             ['f___g', 'fag'],
