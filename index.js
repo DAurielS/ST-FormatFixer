@@ -243,6 +243,12 @@ class TextProcessor {
             ['t___tes', 'testes'],
             ['p___rn', 'porn'],
             ['p___n', 'porn'],
+            ['s___t', 'shit'],
+            ['sh___t', 'shit'],
+            ['b___tch', 'bitch'],
+            ['b___ch', 'bitch'],
+            ['b___er', 'boner'],
+            ['b___ner', 'boner'],
         ]);
 
         let result = text;
