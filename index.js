@@ -257,7 +257,9 @@ class TextProcessor {
                 if (match.endsWith('ing')) return 'jerking';
                 return 'jerked';
             }},
-            { pattern: /h_+rny/gi, word: 'horny' }
+            { pattern: /h_+rny/gi, word: 'horny' },
+            { pattern: /b_+o*b/gi, word: 'boob' },
+            { pattern: /a_+s*s/gi, word: 'ass' },
         ];
 
         let result = text;
