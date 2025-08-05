@@ -199,99 +199,87 @@ class TextProcessor {
      * @param {string} text The input text potentially containing censored words.
      * @returns {string} The uncensored text.
      */
+    /**
+     * Uncensors text by replacing censored versions with original words.
+     * This version handles any number of underscores between the required characters.
+     * @param {string} text The input text potentially containing censored words.
+     * @returns {string} The uncensored text.
+     */
     uncensorText(text) {
-        // Inverse map: 'c_ns_r_d version': 'word'
-        const uncensorMap = new Map([
-            ['p___nis', 'penis'],
-            ['p___is', 'penis'],
-            ['v___ina', 'vagina'],
-            ['v___gina', 'vagina'],
-            ['p___sy', 'pussy'],
-            ['p___ssy', 'pussy'],
-            ['p___y', 'pussy'],
-            ['f___k', 'fuck'],
-            ['f___ck', 'fuck'],
-            ['c___t', 'cunt'],
-            ['c___nt', 'cunt'],
-            ['a___hole', 'asshole'],
-            ['c___ck', 'cock'],
-            ['c___k', 'cock'],
-            ['d___ck', 'dick'], 
-            ['d___k', 'dick'],
-            ['s___x', 'sex'],
-            ['c___m', 'cum'],
-            ['n___pple', 'nipple'],
-            ['n___ple', 'nipple'],
-            ['n___le', 'nipple'],
-            ['p___ss', 'piss'],
-            ['p___s', 'piss'],
-            ['ur___ne', 'urine'],
-            ['an___s', 'anus'],
-            ['an___l', 'anal'],
-            ['r___ctum', 'rectum'],
-            ['r___tum', 'rectum'],
-            ['f___g', 'fag'],
-            ['t___t', 'tit'],
-            ['t___ts', 'tits'],
-            ['t___ties', 'titties'],
-            ['t___tty', 'titty'],
-            ['n___ked', 'naked'],
-            ['n___ed', 'naked'],
-            ['n___de', 'nude'],
-            ['n___dity', 'nudity'],
-            ['t___ticle', 'testicle'],
-            ['t___icle', 'testicle'],
-            ['t___es', 'testes'],
-            ['t___tes', 'testes'],
-            ['p___rn', 'porn'],
-            ['p___n', 'porn'],
-            ['s___t', 'shit'],
-            ['sh___t', 'shit'],
-            ['b___tch', 'bitch'],
-            ['b___ch', 'bitch'],
-            ['b___er', 'boner'],
-            ['b___ner', 'boner'],
-            ['p___bis', 'pubis'],
-            ['p___bic', 'pubic'],
-            ['p___bes', 'pubes'],
-            ['s___d', 'seed'],
-        ]);
+        // Define regex patterns with variable underscore counts using _+
+        const uncensorRules = [
+            // Handle longer patterns first to avoid partial matches
+            { pattern: /p_+nis|p_+is/gi, word: 'penis' },
+            { pattern: /v_+gina|v_+ina/gi, word: 'vagina' },
+            { pattern: /p_+s+y|p_+y/gi, word: 'pussy' },
+            { pattern: /f_+c*k/gi, word: 'fuck' },
+            { pattern: /c_+n*t/gi, word: 'cunt' },
+            { pattern: /a_+s*hole/gi, word: 'asshole' },
+            { pattern: /c_+c*k/gi, word: 'cock' },
+            { pattern: /d_+c*k/gi, word: 'dick' },
+            { pattern: /s_+x/gi, word: 'sex' },
+            { pattern: /c_+m/gi, word: 'cum' },
+            { pattern: /n_+p+le|n_+le/gi, word: 'nipple' },
+            { pattern: /p_+s+/gi, word: 'piss' },
+            { pattern: /ur_+ne/gi, word: 'urine' },
+            { pattern: /an_+s/gi, word: 'anus' },
+            { pattern: /an_+l/gi, word: 'anal' },
+            { pattern: /r_+c*tum/gi, word: 'rectum' },
+            { pattern: /f_+g/gi, word: 'fag' },
+            { pattern: /t_+t(?:s|ies|y)?/gi, word: (match) => {
+                // Special handler for t_t variations
+                const suffix = match.slice(-1);
+                if (suffix === 's') return 'tits';
+                if (match.endsWith('ies')) return 'titties';
+                if (suffix === 'y') return 'titty';
+                return 'tit';
+            }},
+            { pattern: /n_+k(?:ed|dity)|n_+de/gi, word: (match) => {
+                // Special handler for naked/nude variations
+                if (match.includes('k')) return match.includes('dity') ? 'nudity' : 'naked';
+                return 'nude';
+            }},
+            { pattern: /t_+(?:s)?ticle/gi, word: 'testicle' },
+            { pattern: /t_+(?:s)?tes/gi, word: 'testes' },
+            { pattern: /p_+(?:r)?n/gi, word: 'porn' },
+            { pattern: /(?:sh)?_+t/gi, word: 'shit' },
+            { pattern: /b_+t?ch/gi, word: 'bitch' },
+            { pattern: /b_+n?er/gi, word: 'boner' },
+            { pattern: /p_+b(?:is|ic|es)/gi, word: (match) => {
+                // Special handler for pubis variations
+                if (match.endsWith('is')) return 'pubis';
+                if (match.endsWith('ic')) return 'pubic';
+                return 'pubes';
+            }},
+            { pattern: /s_+d/gi, word: 'seed' },
+            { pattern: /er_+tic/gi, word: 'erotic' },
+            { pattern: /j_+rk(?:ing|ed)/gi, word: (match) => {
+                if (match.endsWith('ing')) return 'jerking';
+                return 'jerked';
+            }},
+            { pattern: /h_+rny/gi, word: 'horny' }
+        ];
 
         let result = text;
 
-        // Create a regex that matches all censored patterns from the uncensorMap keys
-        // Sort keys by length descending to ensure longer matches are attempted first
-        const censoredPatterns = Array.from(uncensorMap.keys())
-            .sort((a, b) => b.length - a.length)
-            .map(pattern => pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) // Escape regex special characters
-            .join('|');
+        // Apply each uncensor rule
+        for (const rule of uncensorRules) {
+            result = result.replace(rule.pattern, (match) => {
+                const originalWord = typeof rule.word === 'function' ? rule.word(match) : rule.word;
 
-        if (censoredPatterns.length === 0) {
-            return text;
+                // Preserve original capitalization
+                // Case 1: ALL CAPS (e.g., "F__K" -> "FUCK")
+                if (match === match.toUpperCase()) {
+                    return originalWord.toUpperCase();
+                }
+                // Case 2: Capitalized (e.g., "P___nis" -> "Penis")
+                if (match[0] === match[0].toUpperCase()) {
+                    return originalWord.charAt(0).toUpperCase() + originalWord.slice(1);
+                }
+                // Case 3: all lowercase (e.g., "c___m" -> "cum")
+                return originalWord;
+            });
         }
-
-        const uncensorRegex = new RegExp(`(${censoredPatterns})`, 'gi');
-
-        result = result.replace(uncensorRegex, (match) => {
-            const lowerCaseMatch = match.toLowerCase();
-            const originalWord = uncensorMap.get(lowerCaseMatch);
-
-            if (!originalWord) {
-                return match; // Should not happen if regex is built correctly from map keys
-            }
-
-            // Preserve original capitalization
-            // Case 1: ALL CAPS (e.g., "F__K" -> "FUCK")
-            if (match === match.toUpperCase()) {
-                return originalWord.toUpperCase();
-            }
-            // Case 2: Capitalized (e.g., "P___nis" -> "Penis")
-            if (match[0] === match[0].toUpperCase()) {
-                return originalWord.charAt(0).toUpperCase() + originalWord.slice(1);
-            }
-            // Case 3: all lowercase (e.g., "c___m" -> "cum")
-            return originalWord;
-        });
 
         return result;
     }
