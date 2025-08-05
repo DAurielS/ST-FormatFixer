@@ -251,6 +251,10 @@ class TextProcessor {
             ['b___ch', 'bitch'],
             ['b___er', 'boner'],
             ['b___ner', 'boner'],
+            ['p___bis', 'pubis'],
+            ['p___bic', 'pubic'],
+            ['p___bes', 'pubes'],
+            ['s___d', 'seed'],
         ]);
 
         let result = text;
