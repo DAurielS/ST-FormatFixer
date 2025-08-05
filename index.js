@@ -242,7 +242,7 @@ class TextProcessor {
             { pattern: /t_+(?:s)?ticle/gi, word: 'testicle' },
             { pattern: /t_+(?:s)?tes/gi, word: 'testes' },
             { pattern: /p_+(?:r)?n/gi, word: 'porn' },
-            { pattern: /(?:sh)?_+t/gi, word: 'shit' },
+            { pattern: /sh_+t/gi, word: 'shit' },
             { pattern: /b_+t?ch/gi, word: 'bitch' },
             { pattern: /b_+n?er/gi, word: 'boner' },
             { pattern: /p_+b(?:is|ic|es)/gi, word: (match) => {
