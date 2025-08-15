@@ -240,6 +240,7 @@ class TextProcessor {
                 return 'nude';
             }},
             { pattern: /t_+(?:s)?icle/gi, word: 'testicle' },
+            { pattern: /t_+(?:s)?cle/gi, word: 'testicle' },
             { pattern: /t_+(?:s)?es/gi, word: 'testes' },
             { pattern: /p_+(?:r)?n/gi, word: 'porn' },
             { pattern: /sh_+t/gi, word: 'shit' },
@@ -253,6 +254,7 @@ class TextProcessor {
                 return 'pubes';
             }},
             { pattern: /s_+d/gi, word: 'seed' },
+            { pattern: /s_+men/gi, word: 'semen' },
             { pattern: /er_+tic/gi, word: 'erotic' },
             { pattern: /j_+rk(?:ing|ed)/gi, word: (match) => {
                 if (match.endsWith('ing')) return 'jerking';
