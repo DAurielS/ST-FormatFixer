@@ -239,8 +239,8 @@ class TextProcessor {
                 if (match.includes('k')) return match.includes('dity') ? 'nudity' : 'naked';
                 return 'nude';
             }},
-            { pattern: /t_+(?:s)?ticle/gi, word: 'testicle' },
-            { pattern: /t_+(?:s)?tes/gi, word: 'testes' },
+            { pattern: /t_+(?:s)?icle/gi, word: 'testicle' },
+            { pattern: /t_+(?:s)?es/gi, word: 'testes' },
             { pattern: /p_+(?:r)?n/gi, word: 'porn' },
             { pattern: /sh_+t/gi, word: 'shit' },
             { pattern: /sl_+t/gi, word: 'slut' },
