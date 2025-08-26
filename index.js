@@ -218,6 +218,7 @@ class TextProcessor {
             { pattern: /c_+c*k/gi, word: 'cock' },
             { pattern: /d_+c*k/gi, word: 'dick' },
             { pattern: /s_+x/gi, word: 'sex' },
+            { pattern: /c_+me/gi, word: 'came' },
             { pattern: /c_+m/gi, word: 'cum' },
             { pattern: /n_+p+le|n_+le/gi, word: 'nipple' },
             { pattern: /p_+s+/gi, word: 'piss' },
@@ -263,6 +264,9 @@ class TextProcessor {
             { pattern: /h_+rny/gi, word: 'horny' },
             { pattern: /b_+o*b/gi, word: 'boob' },
             { pattern: /a_+s*s/gi, word: 'ass' },
+            { pattern: /b_+ll/gi, word: 'ball' },
+            { pattern: /wh_+ore/gi, word: 'whore' },
+            { pattern: /w_+ore/gi, word: 'whore' },
         ];
 
         let result = text;
