@@ -267,6 +267,7 @@ class TextProcessor {
             { pattern: /b_+ll/gi, word: 'ball' },
             { pattern: /wh_+ore/gi, word: 'whore' },
             { pattern: /w_+ore/gi, word: 'whore' },
+            { pattern: /h_+le/gi, word: 'hole' }
         ];
 
         let result = text;
