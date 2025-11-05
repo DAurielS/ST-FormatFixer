@@ -26,10 +26,10 @@ const TEST_CASES = {
         input: '*The man needed no "help" to fetch his gun*',
         expected: '*The man needed no "help" to fetch his gun*'
     },
-    ultimate: {
-        name: "Ultimate Test Case",
-        input: '*"Where did I learn those words?"* Fwench Fwy repeats, one paw tapping their chin thoughtfully. *"Hmm, let\'s see... a little bit from here, a little bit from there. You know, being an ancient, all-powerful wish dragon has its perks! I can peek into any reality, any time period, any... *website*."* They giggle, the sound like wind chimes mixed with a dial-up modem.',
-        expected: '"Where did I learn those words?" *Fwench Fwy repeats, one paw tapping their chin thoughtfully.* "Hmm, let\'s see... a little bit from here, a little bit from there. You know, being an ancient, all-powerful wish dragon has its perks! I can peek into any reality, any time period, any... **website**." *They giggle, the sound like wind chimes mixed with a dial-up modem.*'
+    spacing_issues: {
+        name: "Spacing Issues",
+        input: "I  've got     way too many    spaces   - in my text  .",
+        expected: "*I've got way too many spaces - in my text.*"
     },
     cyoa: {
         name: "CYOA Options",
@@ -269,6 +269,9 @@ class TextProcessor {
 
             // Stage 6: Clean up any excessive newlines
             result = this.cleanupExcessNewlines(result);
+
+            // Stage 6.5: Clean up excessive spaces
+            result = this.cleanupExcessSpaces(result);
 
             // Stage 7: Merge nested emphasis
             result = this.mergeNestedEmphasis(result);
@@ -652,6 +655,17 @@ class TextProcessor {
      */
     cleanupExcessNewlines(text) {
         return text.replace(/\n{3,}/g, '\n\n');
+    }
+
+    /**
+     * Stage 6.5: Clean up excessive spaces
+     * Replaces any sequence of 2+ spaces with 1
+     * Also removes unnecessary spaces between words and punctuation marks
+     */
+    cleanupExcessSpaces(text) {
+        return text.replace(/ {2,}/g, ' ')
+                   .replace(/ \.\.\. /g, '...')
+                   .replace(/ ([.,!?;:—'])/g, '$1');
     }
 
     /**
@@ -1049,7 +1063,7 @@ jQuery(async () => {
                                 <option value="nested">Nested Emphasis</option>
                                 <option value="complex">Complex Mixed Formatting</option>
                                 <option value="narrative_quote">Quote Within Narrative</option>
-                                <option value="ultimate">Ultimate Test Case</option>
+                                <option value="spacing_issues">Spacing Issues</option>
                                 <option value="cyoa">CYOA Options</option>
                                 <option value="height_measurement">Height Measurement Protection</option>
                                 <option value="single_word_emphasis">Single Word Emphasis at Line Start</option>
