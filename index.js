@@ -36,6 +36,16 @@ const TEST_CASES = {
         input: '*The ancient tome presents you with several choices:*\n\n1. Open the mysterious door\n2> Investigate the strange sounds\nA) Talk to the old man\nB. Run away as fast as possible',
         expected: '*The ancient tome presents you with several choices:*\n\n1. Open the mysterious door\n2> Investigate the strange sounds\nA) Talk to the old man\nB. Run away as fast as possible'
     },
+    height_measurement: {
+        name: "Height Measurement Protection",
+        input: '*She was 5\'10" tall and wore a "beautiful" dress*',
+        expected: '*She was 5\'10" tall and wore a "beautiful" dress*'
+    },
+    single_word_emphasis: {
+        name: "Single Word Emphasis at Line Start",
+        input: '**Bold.**\n**Bold** text here\n**Another** bold word\nSome **inline** bold',
+        expected: '***Bold.***\n***Bold** text here*\n***Another** bold word*\n*Some **inline** bold*'
+    },
     custom: {
         name: "Custom Input",
         input: "",
@@ -133,6 +143,81 @@ class TextProcessor {
         return result;
     }
 
+    /**
+     * Protect height measurements from quote processing
+     * Handles patterns like 5'10", 6'2", etc.
+     * @param {string} text The input text
+     * @returns {{text: string, heightMeasurements: Map<string, string>}} Object with text containing placeholders and a map of placeholders to original measurements
+     */
+    protectHeightMeasurements(text) {
+        const heightMeasurements = new Map();
+        let processedText = text;
+        let index = 0;
+        const generatePlaceholder = () => `__HEIGHT_MEASUREMENT_${index++}__`;
+
+        // Match height measurements: digit(s) + ' + digit(s) + "
+        // Examples: 5'10", 6'2", 10'11"
+        const heightRegex = /\d+'\d{1,2}"/g;
+        
+        processedText = processedText.replace(heightRegex, (match) => {
+            const placeholder = generatePlaceholder();
+            heightMeasurements.set(placeholder, match);
+            return placeholder;
+        });
+
+        return { text: processedText, heightMeasurements };
+    }
+
+    /**
+     * Restore height measurements by replacing placeholders
+     * @param {string} text The text containing placeholders
+     * @param {Map<string, string>} heightMeasurements Map of placeholders to original measurements
+     * @returns {string} The text with original height measurements restored
+     */
+    restoreHeightMeasurements(text, heightMeasurements) {
+        let result = text;
+        for (const [placeholder, originalMeasurement] of heightMeasurements.entries()) {
+            const escapedPlaceholder = placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const placeholderRegex = new RegExp(escapedPlaceholder, 'g');
+            result = result.replace(placeholderRegex, originalMeasurement);
+        }
+        return result;
+    }
+
+    /**
+     * Fix single bold words at the start of lines by converting them to bold-italic
+     * and wrapping the rest of the line in italics if needed
+     * @param {string} text The input text
+     * @returns {string} The text with fixed single word emphasis
+     */
+    fixSingleWordEmphasisAtLineStart(text) {
+        const lines = text.split('\n');
+        const processedLines = lines.map(line => {
+            // Skip lines that already start with single asterisk (already italicized)
+            if (line.trim().startsWith('*') && !line.trim().startsWith('**')) {
+                return line;
+            }
+            
+            // Match **word** (possibly with punctuation) at the start of a line
+            const match = line.match(/^(\s*)\*\*([^*]+?)\*\*(.*)$/);
+            if (!match) {
+                return line;
+            }
+            
+            const [, leadingSpace, boldContent, restOfLine] = match;
+            
+            // If there's content after the bold word, only triple the leading asterisks.
+            if (restOfLine.trim().length > 0) {
+                return `${leadingSpace}***${boldContent}**${restOfLine}`;
+            } else {
+                // If it's just the bold word (possibly with punctuation), make it bold-italic
+                return `${leadingSpace}***${boldContent}***`;
+            }
+        });
+        
+        return processedLines.join('\n');
+    }
+
     processText(text) {
         try {
             const context = SillyTavern.getContext();
@@ -151,7 +236,11 @@ class TextProcessor {
             // Stage 0: Normalize all "smart" characters to regular characters
             result = this.normalizeSmartCharacters(result);
 
-            // Stage 1: Process quotes (keep the working version)
+            // Stage 0.5: Protect height measurements before quote processing
+            const { text: textWithHeightPlaceholders, heightMeasurements } = this.protectHeightMeasurements(result);
+            result = textWithHeightPlaceholders;
+
+            // Stage 1: Process quotes
             result = this.processQuotes(result);
 
             // Stage 1.5: Cleanup consecutive double quotes
@@ -184,6 +273,12 @@ class TextProcessor {
             // Stage 7: Merge nested emphasis
             result = this.mergeNestedEmphasis(result);
 
+            // Stage 7.5: Fix single bold words at line start
+            result = this.fixSingleWordEmphasisAtLineStart(result);
+
+            // Post-processing: Restore height measurements after quote processing
+            result = this.restoreHeightMeasurements(result, heightMeasurements);
+
             // Post-processing: Restore protected blocks - MUST be the last step
             result = this.restoreProtectedBlocks(result, protectedBlocks);
 
@@ -196,67 +291,95 @@ class TextProcessor {
 
     /**
      * Uncensors text by replacing censored versions with original words.
+     * This version handles any number of underscores between the required characters.
      * @param {string} text The input text potentially containing censored words.
      * @returns {string} The uncensored text.
      */
     uncensorText(text) {
-        // Inverse map: 'c_ns_r_d version': 'word'
-        const uncensorMap = new Map([
-            ['p___nis', 'penis'],
-            ['p___is', 'penis'],
-            ['v___ina', 'vagina'],
-            ['v___gina', 'vagina'],
-            ['p___sy', 'pussy'],
-            ['p___ssy', 'pussy'],
-            ['p___y', 'pussy'],
-            ['f___k', 'fuck'],
-            ['f___ck', 'fuck'],
-            ['c___t', 'cunt'],
-            ['c___nt', 'cunt'],
-            ['a___hole', 'asshole'],
-            ['c___ck', 'cock'],
-            ['c___k', 'cock'],
-            ['d___ck', 'dick'], 
-            ['d___k', 'dick'],
-            ['s___x', 'sex'],
-            ['c___m', 'cum'],
-        ]);
+        // Define regex patterns with variable underscore counts using _+
+        const uncensorRules = [
+            // Handle longer patterns first to avoid partial matches
+            { pattern: /p_+nis|p_+is/gi, word: 'penis' },
+            { pattern: /v_+gina|v_+ina/gi, word: 'vagina' },
+            { pattern: /p_+s+y|p_+y/gi, word: 'pussy' },
+            { pattern: /f_+c*k/gi, word: 'fuck' },
+            { pattern: /c_+n*t/gi, word: 'cunt' },
+            { pattern: /a_+s*hole/gi, word: 'asshole' },
+            { pattern: /c_+c*k/gi, word: 'cock' },
+            { pattern: /d_+c*k/gi, word: 'dick' },
+            { pattern: /s_+x/gi, word: 'sex' },
+            { pattern: /c_+me/gi, word: 'came' },
+            { pattern: /c_+m/gi, word: 'cum' },
+            { pattern: /n_+p+le|n_+le/gi, word: 'nipple' },
+            { pattern: /p_+s+/gi, word: 'piss' },
+            { pattern: /ur_+ne/gi, word: 'urine' },
+            { pattern: /an_+s/gi, word: 'anus' },
+            { pattern: /an_+l/gi, word: 'anal' },
+            { pattern: /r_+c*tum/gi, word: 'rectum' },
+            { pattern: /f_+g/gi, word: 'fag' },
+            { pattern: /t_+t(?:s|ies|y)?/gi, word: (match) => {
+                // Special handler for t_t variations
+                const suffix = match.slice(-1);
+                if (suffix === 's') return 'tits';
+                if (match.endsWith('ies')) return 'titties';
+                if (suffix === 'y') return 'titty';
+                return 'tit';
+            }},
+            { pattern: /n_+k(?:ed|dity)|n_+de/gi, word: (match) => {
+                // Special handler for naked/nude variations
+                if (match.includes('k')) return match.includes('dity') ? 'nudity' : 'naked';
+                return 'nude';
+            }},
+            { pattern: /t_+(?:s)?icle/gi, word: 'testicle' },
+            { pattern: /t_+(?:s)?cle/gi, word: 'testicle' },
+            { pattern: /t_+(?:s)?es/gi, word: 'testes' },
+            { pattern: /p_+(?:r)?n/gi, word: 'porn' },
+            { pattern: /sh_+t/gi, word: 'shit' },
+            { pattern: /sl_+t/gi, word: 'slut' },
+            { pattern: /b_+t?ch/gi, word: 'bitch' },
+            { pattern: /b_+n?er/gi, word: 'boner' },
+            { pattern: /p_+b(?:is|ic|es)/gi, word: (match) => {
+                // Special handler for pubis variations
+                if (match.endsWith('is')) return 'pubis';
+                if (match.endsWith('ic')) return 'pubic';
+                return 'pubes';
+            }},
+            { pattern: /s_+d/gi, word: 'seed' },
+            { pattern: /s_+men/gi, word: 'semen' },
+            { pattern: /er_+tic/gi, word: 'erotic' },
+            { pattern: /j_+rk(?:ing|ed)/gi, word: (match) => {
+                if (match.endsWith('ing')) return 'jerking';
+                return 'jerked';
+            }},
+            { pattern: /h_+rny/gi, word: 'horny' },
+            { pattern: /b_+o*b/gi, word: 'boob' },
+            { pattern: /a_+s*s/gi, word: 'ass' },
+            { pattern: /b_+ll/gi, word: 'ball' },
+            { pattern: /wh_+ore/gi, word: 'whore' },
+            { pattern: /w_+ore/gi, word: 'whore' },
+            { pattern: /h_+le/gi, word: 'hole' }
+        ];
 
         let result = text;
 
-        // Create a regex that matches all censored patterns from the uncensorMap keys
-        // Sort keys by length descending to ensure longer matches are attempted first
-        const censoredPatterns = Array.from(uncensorMap.keys())
-            .sort((a, b) => b.length - a.length)
-            .map(pattern => pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) // Escape regex special characters
-            .join('|');
+        // Apply each uncensor rule
+        for (const rule of uncensorRules) {
+            result = result.replace(rule.pattern, (match) => {
+                const originalWord = typeof rule.word === 'function' ? rule.word(match) : rule.word;
 
-        if (censoredPatterns.length === 0) {
-            return text;
+                // Preserve original capitalization
+                // Case 1: ALL CAPS (e.g., "F__K" -> "FUCK")
+                if (match === match.toUpperCase()) {
+                    return originalWord.toUpperCase();
+                }
+                // Case 2: Capitalized (e.g., "P___nis" -> "Penis")
+                if (match[0] === match[0].toUpperCase()) {
+                    return originalWord.charAt(0).toUpperCase() + originalWord.slice(1);
+                }
+                // Case 3: all lowercase (e.g., "c___m" -> "cum")
+                return originalWord;
+            });
         }
-
-        const uncensorRegex = new RegExp(`(${censoredPatterns})`, 'gi');
-
-        result = result.replace(uncensorRegex, (match) => {
-            const lowerCaseMatch = match.toLowerCase();
-            const originalWord = uncensorMap.get(lowerCaseMatch);
-
-            if (!originalWord) {
-                return match; // Should not happen if regex is built correctly from map keys
-            }
-
-            // Preserve original capitalization
-            // Case 1: ALL CAPS (e.g., "F__K" -> "FUCK")
-            if (match === match.toUpperCase()) {
-                return originalWord.toUpperCase();
-            }
-            // Case 2: Capitalized (e.g., "P___nis" -> "Penis")
-            if (match[0] === match[0].toUpperCase()) {
-                return originalWord.charAt(0).toUpperCase() + originalWord.slice(1);
-            }
-            // Case 3: all lowercase (e.g., "c___m" -> "cum")
-            return originalWord;
-        });
 
         return result;
     }
@@ -928,6 +1051,8 @@ jQuery(async () => {
                                 <option value="narrative_quote">Quote Within Narrative</option>
                                 <option value="ultimate">Ultimate Test Case</option>
                                 <option value="cyoa">CYOA Options</option>
+                                <option value="height_measurement">Height Measurement Protection</option>
+                                <option value="single_word_emphasis">Single Word Emphasis at Line Start</option>
                                 <option value="custom">Custom Input</option>
                             </select>
                         </div>
