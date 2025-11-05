@@ -36,6 +36,16 @@ const TEST_CASES = {
         input: '*The ancient tome presents you with several choices:*\n\n1. Open the mysterious door\n2> Investigate the strange sounds\nA) Talk to the old man\nB. Run away as fast as possible',
         expected: '*The ancient tome presents you with several choices:*\n\n1. Open the mysterious door\n2> Investigate the strange sounds\nA) Talk to the old man\nB. Run away as fast as possible'
     },
+    height_measurement: {
+        name: "Height Measurement Protection",
+        input: '*She was 5\'10" tall and wore a "beautiful" dress*',
+        expected: '*She was 5\'10" tall and wore a "beautiful" dress*'
+    },
+    single_word_emphasis: {
+        name: "Single Word Emphasis at Line Start",
+        input: '**Bold.**\n**Bold** text here\n**Another** bold word\nSome **inline** bold',
+        expected: '***Bold.***\n***Bold** text here*\n***Another** bold word*\n*Some **inline** bold*'
+    },
     custom: {
         name: "Custom Input",
         input: "",
@@ -133,6 +143,81 @@ class TextProcessor {
         return result;
     }
 
+    /**
+     * Protect height measurements from quote processing
+     * Handles patterns like 5'10", 6'2", etc.
+     * @param {string} text The input text
+     * @returns {{text: string, heightMeasurements: Map<string, string>}} Object with text containing placeholders and a map of placeholders to original measurements
+     */
+    protectHeightMeasurements(text) {
+        const heightMeasurements = new Map();
+        let processedText = text;
+        let index = 0;
+        const generatePlaceholder = () => `__HEIGHT_MEASUREMENT_${index++}__`;
+
+        // Match height measurements: digit(s) + ' + digit(s) + "
+        // Examples: 5'10", 6'2", 10'11"
+        const heightRegex = /\d+'\d{1,2}"/g;
+        
+        processedText = processedText.replace(heightRegex, (match) => {
+            const placeholder = generatePlaceholder();
+            heightMeasurements.set(placeholder, match);
+            return placeholder;
+        });
+
+        return { text: processedText, heightMeasurements };
+    }
+
+    /**
+     * Restore height measurements by replacing placeholders
+     * @param {string} text The text containing placeholders
+     * @param {Map<string, string>} heightMeasurements Map of placeholders to original measurements
+     * @returns {string} The text with original height measurements restored
+     */
+    restoreHeightMeasurements(text, heightMeasurements) {
+        let result = text;
+        for (const [placeholder, originalMeasurement] of heightMeasurements.entries()) {
+            const escapedPlaceholder = placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const placeholderRegex = new RegExp(escapedPlaceholder, 'g');
+            result = result.replace(placeholderRegex, originalMeasurement);
+        }
+        return result;
+    }
+
+    /**
+     * Fix single bold words at the start of lines by converting them to bold-italic
+     * and wrapping the rest of the line in italics if needed
+     * @param {string} text The input text
+     * @returns {string} The text with fixed single word emphasis
+     */
+    fixSingleWordEmphasisAtLineStart(text) {
+        const lines = text.split('\n');
+        const processedLines = lines.map(line => {
+            // Skip lines that already start with single asterisk (already italicized)
+            if (line.trim().startsWith('*') && !line.trim().startsWith('**')) {
+                return line;
+            }
+            
+            // Match **word** (possibly with punctuation) at the start of a line
+            const match = line.match(/^(\s*)\*\*([^*]+?)\*\*(.*)$/);
+            if (!match) {
+                return line;
+            }
+            
+            const [, leadingSpace, boldContent, restOfLine] = match;
+            
+            // If there's content after the bold word, only triple the leading asterisks.
+            if (restOfLine.trim().length > 0) {
+                return `${leadingSpace}***${boldContent}**${restOfLine}`;
+            } else {
+                // If it's just the bold word (possibly with punctuation), make it bold-italic
+                return `${leadingSpace}***${boldContent}***`;
+            }
+        });
+        
+        return processedLines.join('\n');
+    }
+
     processText(text) {
         try {
             const context = SillyTavern.getContext();
@@ -151,7 +236,11 @@ class TextProcessor {
             // Stage 0: Normalize all "smart" characters to regular characters
             result = this.normalizeSmartCharacters(result);
 
-            // Stage 1: Process quotes (keep the working version)
+            // Stage 0.5: Protect height measurements before quote processing
+            const { text: textWithHeightPlaceholders, heightMeasurements } = this.protectHeightMeasurements(result);
+            result = textWithHeightPlaceholders;
+
+            // Stage 1: Process quotes
             result = this.processQuotes(result);
 
             // Stage 1.5: Cleanup consecutive double quotes
@@ -184,6 +273,12 @@ class TextProcessor {
             // Stage 7: Merge nested emphasis
             result = this.mergeNestedEmphasis(result);
 
+            // Stage 7.5: Fix single bold words at line start
+            result = this.fixSingleWordEmphasisAtLineStart(result);
+
+            // Post-processing: Restore height measurements after quote processing
+            result = this.restoreHeightMeasurements(result, heightMeasurements);
+
             // Post-processing: Restore protected blocks - MUST be the last step
             result = this.restoreProtectedBlocks(result, protectedBlocks);
 
@@ -194,11 +289,6 @@ class TextProcessor {
         }
     }
 
-    /**
-     * Uncensors text by replacing censored versions with original words.
-     * @param {string} text The input text potentially containing censored words.
-     * @returns {string} The uncensored text.
-     */
     /**
      * Uncensors text by replacing censored versions with original words.
      * This version handles any number of underscores between the required characters.
@@ -961,6 +1051,8 @@ jQuery(async () => {
                                 <option value="narrative_quote">Quote Within Narrative</option>
                                 <option value="ultimate">Ultimate Test Case</option>
                                 <option value="cyoa">CYOA Options</option>
+                                <option value="height_measurement">Height Measurement Protection</option>
+                                <option value="single_word_emphasis">Single Word Emphasis at Line Start</option>
                                 <option value="custom">Custom Input</option>
                             </select>
                         </div>
