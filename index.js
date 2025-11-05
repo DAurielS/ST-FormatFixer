@@ -1,8 +1,12 @@
 import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
 import { SlashCommand } from "../../../slash-commands/SlashCommand.js";
+import { extension_settings } from "../../../extensions.js";
 
 // Extension name
 const extensionName = "ST-FormatFixer";
+const formatFixerDefaults = {
+    processQuotes: false
+};
 
 // Test cases
 const TEST_CASES = {
@@ -221,6 +225,7 @@ class TextProcessor {
     processText(text) {
         try {
             const context = SillyTavern.getContext();
+            const settings = loadSettings();
 
             if (context.characters[context.characterId].tags.includes("Assistant")) {
                 // If the character is an Assistant, skip processing
@@ -241,7 +246,9 @@ class TextProcessor {
             result = textWithHeightPlaceholders;
 
             // Stage 1: Process quotes
-            result = this.processQuotes(result);
+            if (settings.processQuotes) {
+                result = this.processQuotes(result);
+            }
 
             // Stage 1.5: Cleanup consecutive double quotes
             result = this.cleanupConsecutiveQuotes(result);
@@ -1007,6 +1014,30 @@ class TextProcessor {
 // Initialize processor
 const processor = new TextProcessor();
 
+// Settings management
+function loadSettings() {
+    const context = SillyTavern.getContext();
+    const settings = context.extensionSettings['format-fixer'];
+    
+    if (!settings) {
+        // Initialize with default settings
+        for (const key in formatFixerDefaults) {
+            context.extensionSettings['format-fixer'][key] = formatFixerDefaults[key];
+        }
+        context.saveSettingsDebounced();
+        return context.extensionSettings['format-fixer'];
+    }
+    
+    return settings;
+}
+
+function onProcessQuotesToggleChange(event) {
+    const context = SillyTavern.getContext();
+    const settings = context.extensionSettings['format-fixer'];
+    settings.processQuotes = $(event.target).prop('checked');
+    context.saveSettingsDebounced();
+}
+
 // Format command function
 function formatCommand(_, text) {
     if (!text) {
@@ -1047,6 +1078,9 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 // Initialize extension
 jQuery(async () => {
     try {
+        // Load settings
+        const settings = loadSettings();
+        
         // Add settings panel
         const settingsHtml = `
             <div class="format-fixer-settings">
@@ -1056,6 +1090,11 @@ jQuery(async () => {
                         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
                     <div class="inline-drawer-content">
+                        <div class="format_fixer_block">
+                            <input title="When enabled, removes asterisks directly surrounding quotation marks.\nEnable if using a very low-power model that frequently places these incorrectly, otherwise leave disabled." type="checkbox" id="format_fixer_process_quotes" ${settings.processQuotes ? 'checked' : ''} />
+                            <label for="format_fixer_process_quotes">Process Quotes</label>
+                        </div>
+                        
                         <div class="format_fixer_block">
                             <label for="format_fixer_test_case">Test Case:</label>
                             <select id="format_fixer_test_case">
@@ -1149,6 +1188,9 @@ jQuery(async () => {
             }
         });
 
+        // Handle process quotes toggle
+        $("#format_fixer_process_quotes").on("change", onProcessQuotesToggleChange);
+        
         // Initialize test case dropdown
         $("#format_fixer_test_case").trigger("change");
     } catch (error) {
