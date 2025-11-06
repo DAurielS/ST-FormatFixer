@@ -3,7 +3,7 @@ import { SlashCommand } from "../../../slash-commands/SlashCommand.js";
 import { extension_settings } from "../../../extensions.js";
 
 // Extension name
-const extensionName = "ST-FormatFixer";
+const extensionName = "format-fixer";
 const formatFixerDefaults = {
     processQuotes: false
 };
@@ -1016,9 +1016,7 @@ const processor = new TextProcessor();
 
 // Settings management
 function loadSettings() {
-    const context = SillyTavern.getContext();
-    const settings = context.extensionSettings['format-fixer'];
-    
+   
     // Create the settings if they don't exist or are empty
     if (!extension_settings[extensionName] || Object.keys(extension_settings[extensionName]).length === 0) {
         extension_settings[extensionName] = { ...formatFixerDefaults };
@@ -1031,7 +1029,7 @@ function loadSettings() {
         }
     }
     
-    return settings;
+    context.saveSettingsDebounced();
 }
 
 function onProcessQuotesToggleChange(event) {
