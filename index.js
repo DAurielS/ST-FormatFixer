@@ -1030,6 +1030,11 @@ function loadSettings() {
             }
         }
     }
+
+    // Last ditch attempt to ensure settings exist
+    if (settings.processQuotes === undefined) {
+        settings.processQuotes = formatFixerDefaults.processQuotes;
+    }
     
     context.saveSettingsDebounced();
     return settings;
