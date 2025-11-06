@@ -5,7 +5,7 @@ import { extension_settings } from "../../../extensions.js";
 // Extension name
 const extensionName = "format-fixer";
 const formatFixerDefaults = {
-    processQuotes: false
+    processQuotes: false,
 };
 
 // Test cases
@@ -1017,10 +1017,11 @@ const processor = new TextProcessor();
 // Settings management
 function loadSettings() {
     const context = SillyTavern.getContext();
+    const settings = context.extensionSettings['format-fixer'];
    
     // Create the settings if they don't exist or are empty
-    if (!extension_settings[extensionName] || Object.keys(extension_settings[extensionName]).length === 0) {
-        extension_settings[extensionName] = { ...formatFixerDefaults };
+    if (!settings || Object.keys(settings).length === 0) {
+        settings = { ...formatFixerDefaults };
     } else {
         // Ensure all default keys exist if settings were loaded but might be from an older version
         for (const key in formatFixerDefaults) {
@@ -1031,7 +1032,7 @@ function loadSettings() {
     }
     
     context.saveSettingsDebounced();
-    return settings = extension_settings[extensionName];
+    return settings;
 }
 
 function onProcessQuotesToggleChange(event) {
