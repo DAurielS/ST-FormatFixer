@@ -1019,13 +1019,16 @@ function loadSettings() {
     const context = SillyTavern.getContext();
     const settings = context.extensionSettings['format-fixer'];
     
-    if (!settings) {
-        // Initialize with default settings
+    // Create the settings if they don't exist or are empty
+    if (!extension_settings[extensionName] || Object.keys(extension_settings[extensionName]).length === 0) {
+        extension_settings[extensionName] = { ...formatFixerDefaults };
+    } else {
+        // Ensure all default keys exist if settings were loaded but might be from an older version
         for (const key in formatFixerDefaults) {
-            context.extensionSettings['format-fixer'][key] = formatFixerDefaults[key];
+            if (extension_settings[extensionName][key] === undefined) {
+                extension_settings[extensionName][key] = formatFixerDefaults[key];
+            }
         }
-        context.saveSettingsDebounced();
-        return context.extensionSettings['format-fixer'];
     }
     
     return settings;
