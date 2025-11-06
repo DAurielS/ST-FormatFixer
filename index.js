@@ -1017,33 +1017,26 @@ const processor = new TextProcessor();
 // Settings management
 function loadSettings() {
     const context = SillyTavern.getContext();
-    const settings = context.extensionSettings['format-fixer'];
-
-    settings = {
-        processQuotes: false
-    };
    
     // Create the settings if they don't exist or are empty
-    if (!settings || Object.keys(settings).length === 0) {
-        settings = { ...formatFixerDefaults };
+    if (!context.extensionSettings[extensionName] || Object.keys(context.extensionSettings[extensionName]).length === 0) {
+        context.extensionSettings[extensionName] = { ...formatFixerDefaults };
     } else {
         // Ensure all default keys exist if settings were loaded but might be from an older version
         for (const key in formatFixerDefaults) {
-            if (settings[key] === undefined) {
-                settings[key] = formatFixerDefaults[key];
+            if (context.extensionSettings[extensionName][key] === undefined) {
+                context.extensionSettings[extensionName][key] = formatFixerDefaults[key];
             }
         }
     }
 
     // Last ditch attempt to ensure settings exist
-    if (settings.processQuotes === undefined) {
-        settings = {
-            processQuotes: false
-        };
+    if (context.extensionSettings[extensionName].processQuotes === undefined) {
+        context.extensionSettings[extensionName].processQuotes = false;
     }
     
     context.saveSettingsDebounced();
-    return settings;
+    return context.extensionSettings[extensionName];
 }
 
 function onProcessQuotesToggleChange(event) {
