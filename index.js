@@ -1016,6 +1016,7 @@ const processor = new TextProcessor();
 
 // Settings management
 function loadSettings() {
+    const context = SillyTavern.getContext();
    
     // Create the settings if they don't exist or are empty
     if (!extension_settings[extensionName] || Object.keys(extension_settings[extensionName]).length === 0) {
@@ -1030,6 +1031,7 @@ function loadSettings() {
     }
     
     context.saveSettingsDebounced();
+    return settings = extension_settings[extensionName];
 }
 
 function onProcessQuotesToggleChange(event) {
