@@ -1018,6 +1018,10 @@ const processor = new TextProcessor();
 function loadSettings() {
     const context = SillyTavern.getContext();
     const settings = context.extensionSettings['format-fixer'];
+
+    settings = {
+        processQuotes: false
+    };
    
     // Create the settings if they don't exist or are empty
     if (!settings || Object.keys(settings).length === 0) {
@@ -1025,8 +1029,8 @@ function loadSettings() {
     } else {
         // Ensure all default keys exist if settings were loaded but might be from an older version
         for (const key in formatFixerDefaults) {
-            if (extension_settings[extensionName][key] === undefined) {
-                extension_settings[extensionName][key] = formatFixerDefaults[key];
+            if (settings[key] === undefined) {
+                settings[key] = formatFixerDefaults[key];
             }
         }
     }
