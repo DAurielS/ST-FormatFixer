@@ -1033,7 +1033,9 @@ function loadSettings() {
 
     // Last ditch attempt to ensure settings exist
     if (settings.processQuotes === undefined) {
-        settings.processQuotes = formatFixerDefaults.processQuotes;
+        settings = {
+            processQuotes: false
+        };
     }
     
     context.saveSettingsDebounced();
