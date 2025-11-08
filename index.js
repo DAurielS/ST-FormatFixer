@@ -1033,7 +1033,7 @@ function loadSettings() {
     // Last ditch attempt to ensure settings exist
     if (context.extensionSettings[extensionName].processQuotes === undefined) {
         context.extensionSettings[extensionName].processQuotes = false;
-    }li
+    }
     
     context.saveSettingsDebounced();
     return context.extensionSettings[extensionName];
