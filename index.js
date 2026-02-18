@@ -420,9 +420,6 @@ class TextProcessor {
             // Bullets and decorative characters
             .replace(/[\u2022\u2043\u2219\u25D8\u25E6\u2619\u2765\u2767]/g, '*')
             
-            // Angle quotes (guillemets)
-            .replace(/[\u2039\u203A\u00AB\u00BB]/g, '"')
-            
             // Swung dash
             .replace(/\u2053/g, '~');
     }
