@@ -500,7 +500,7 @@ class TextProcessor {
     normalizeSmartCharacters(text) {
         return text
             // Double quotes (including fullwidth and ornamental variants)
-            .replace(/[\u00AB\u00BB\u201C\u201D\u02BA\u02EE\u201F\u275D\u275E\u301D\u301E\uFF02]/g, '"')
+            .replace(/[\u201C\u201D\u02BA\u02EE\u201F\u275D\u275E\u301D\u301E\uFF02]/g, '"')
             
             // Single quotes and apostrophes (Not including backticks/graves)
             .replace(/[\u2018\u2019\u02BB\u02C8\u02BC\u02BD\u02B9\u201B\uFF07\u02CA\u275B\u275C\u0313\u0314]/g, "'")
