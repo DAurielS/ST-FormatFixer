@@ -50,6 +50,31 @@ const TEST_CASES = {
         input: '**Bold.**\n**Bold** text here\n**Another** bold word\nSome **inline** bold',
         expected: '***Bold.***\n***Bold** text here*\n***Another** bold word*\n*Some **inline** bold*'
     },
+    html_comment: {
+        name: "HTML Comment Protection",
+        input: '<!-- header -->\nShe stepped inside, heart pounding.',
+        expected: '<!-- header -->\n*She stepped inside, heart pounding.*'
+    },
+    html_inline: {
+        name: "HTML Inline Element Protection",
+        input: '*She reached out and touched the <span style="color:red">glowing crystal</span>, feeling its warmth.*',
+        expected: '*She reached out and touched the <span style="color:red">glowing crystal</span>, feeling its warmth.*'
+    },
+    html_block: {
+        name: "HTML Block Element Protection",
+        input: '<div class="choice-box">\n  **Option A:** Run away\n  **Option B:** Stay and fight\n</div>\n\nShe made her choice.',
+        expected: '<div class="choice-box">\n  **Option A:** Run away\n  **Option B:** Stay and fight\n</div>\n\n*She made her choice.*'
+    },
+    html_void: {
+        name: "HTML Void Element Protection",
+        input: 'The door opened.<br>She stepped inside, heart pounding.',
+        expected: '*The door opened.<br>She stepped inside, heart pounding.*'
+    },
+    html_style: {
+        name: "HTML Style Block Protection",
+        input: '<style>.choice { color: red; font-weight: bold; }</style>\n\nShe made her choice.',
+        expected: '<style>.choice { color: red; font-weight: bold; }</style>\n\n*She made her choice.*'
+    },
     custom: {
         name: "Custom Input",
         input: "",
@@ -98,7 +123,10 @@ class TextProcessor {
         }
 
         // 3. Extract "Message #X: " tags at the start of lines
-        const messageNumRegex = /^(.*? Message #\d+: )/gm; // Use multiline flag
+        // [^*\n]*? instead of .*? so leading asterisks added by prior formatting
+        // passes are NOT consumed into the placeholder, which would cause each
+        // subsequent pass to prepend another asterisk.
+        const messageNumRegex = /^([^*\n]*? Message #\d+: )/gm; // Use multiline flag
         processedText = processedText.replace(messageNumRegex, (match, group1) => {
             // group1 contains the matched tag, e.g., "User Message #1: "
             const placeholder = generatePlaceholder();
@@ -123,6 +151,79 @@ class TextProcessor {
             processedText = processedText.replace(/\[(.*)$/s, placeholder);
         }
 
+        // 6. Extract HTML comments <!-- ... --> before anything else so their
+        // content (which may contain tag-like syntax) is never processed.
+        processedText = processedText.replace(/<!--[\s\S]*?-->/g, (match) => {
+            const placeholder = generatePlaceholder();
+            protectedBlocks.set(placeholder, match);
+            return placeholder;
+        });
+
+        // 7. Extract paired HTML elements with their full content.
+        // Each iteration replaces INNERMOST pairs only, then repeats until no
+        // matches remain, so outer wrappers are matched in subsequent passes.
+        //
+        // Key: the content regex (?:(?!<TAG\b)[\s\S])*? uses a negative lookahead
+        // to forbid another opening of the SAME tag inside the content. This
+        // guarantees we only ever match a truly innermost pair each pass, which
+        // prevents the non-greedy engine from pairing an outer opening tag with
+        // an inner closing tag and leaving the outer closing tag as an orphan.
+        //
+        // Processes <style>/<script> first since their content may contain
+        // characters like * and " that would corrupt later formatting stages.
+        const pairedHtmlTags = [
+            'style', 'script',                              // content-heavy, process first
+            'details', 'summary', 'dialog',
+            'div', 'span', 'section', 'article', 'aside',
+            'header', 'footer', 'main', 'nav',
+            'figure', 'figcaption',
+            'p', 'blockquote', 'pre', 'code',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'table',
+            'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+            'form', 'fieldset', 'legend', 'label',
+            'a', 'abbr', 'address', 'b', 'bdi', 'bdo',
+            'cite', 'data', 'dfn', 'em', 'i', 'kbd',
+            'mark', 'q', 'rp', 'rt', 'ruby', 's',
+            'samp', 'small', 'strong', 'sub', 'sup',
+            'time', 'u', 'var', 'wbr',
+            'button', 'datalist', 'input', 'meter',
+            'optgroup', 'option', 'output', 'progress',
+            'select', 'textarea',
+            'audio', 'canvas', 'iframe', 'img',
+            'object', 'picture', 'portal', 'source',
+            'svg', 'video',
+        ];
+
+        for (const tag of pairedHtmlTags) {
+            // Negative lookahead (?!<tag\b) in the content part ensures we never
+            // consume another opening of the same tag, so only truly innermost
+            // pairs are matched. The do-while loop then propagates outward.
+            const tagRegex = new RegExp(
+                `<${tag}(\\s[^>]*)?>(?:(?!<${tag}\\b)[\\s\\S])*?<\\/${tag}>`, 'gi'
+            );
+            let previous;
+            do {
+                previous = processedText;
+                processedText = processedText.replace(tagRegex, (match) => {
+                    const placeholder = generatePlaceholder();
+                    protectedBlocks.set(placeholder, match);
+                    return placeholder;
+                });
+            } while (processedText !== previous);
+        }
+
+        // 7. Extract self-closing / void HTML tags.
+        // These either use explicit XML-style self-closing syntax (<br />) or are
+        // HTML void elements that never have a closing tag (<br>, <img src="...">).
+        // Also catches any tag written with a trailing slash that isn't in the paired list.
+        const selfClosingHtmlRegex = /<(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)(\s[^>]*)?\/?>|<[a-zA-Z][a-zA-Z0-9]*(\s[^>]*)?\s*\/>/gi;
+        processedText = processedText.replace(selfClosingHtmlRegex, (match) => {
+            const placeholder = generatePlaceholder();
+            protectedBlocks.set(placeholder, match);
+            return placeholder;
+        });
+
         return { text: processedText, protectedBlocks };
     }
 
@@ -134,12 +235,10 @@ class TextProcessor {
      */
     restoreProtectedBlocks(text, protectedBlocks) {
         let result = text;
-        // Replace placeholders with original content
-        // Iterate in reverse order of keys (indices) might be safer if placeholders could somehow nest, though unlikely here.
-        // However, simple iteration should be fine given the generation method.
-        for (const [placeholder, originalContent] of protectedBlocks.entries()) {
-            // Use a regex with global flag to replace all occurrences
-            // Escape placeholder string for use in regex
+        // Replace placeholders with original content in reverse order of their indices 
+        // to ensure inner blocks are restored before outer blocks.
+        const entries = Array.from(protectedBlocks.entries()).reverse();
+        for (const [placeholder, originalContent] of entries) {
             const escapedPlaceholder = placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
             const placeholderRegex = new RegExp(escapedPlaceholder, 'g');
             result = result.replace(placeholderRegex, originalContent);
@@ -603,6 +702,20 @@ class TextProcessor {
     }
 
     /**
+     * Returns the section text with any leading or trailing placeholder strings
+     * stripped away. Used by processNarrative so that a placeholder prefix/suffix
+     * (e.g. a Message # tag at the start of the line) is treated as transparent
+     * when deciding whether the section is already italicized or needs asterisks.
+     * Example: "__PROTECTED_BLOCK_PLACEHOLDER_0__*text*" → "*text*"
+     */
+    getEffectiveText(text) {
+        const ph = `${this.protectedBlockPlaceholderPrefix}\\d+${this.protectedBlockPlaceholderSuffix}`;
+        return text
+            .replace(new RegExp(`^(?:${ph})+`), '')
+            .replace(new RegExp(`(?:${ph})+$`), '');
+    }
+
+    /**
      * Stage 5: Process narrative sections
      * Adds italics to narrative text between quotes
      */
@@ -629,19 +742,49 @@ class TextProcessor {
             }
             else {
                 // Handle narrative sections
-                if (!this.isItalicized(section.text)) {
-                    // When adding start asterisk, also add space if needed
-                    if (!section.text.startsWith('*')) {
-                        if (result && !result.endsWith(' ') && !result.endsWith('\n')) result += ' ';
-                        result += '*';
+                // If the section is purely a placeholder, pass it through unchanged
+                // so we don't wrap e.g. a standalone [OOC: ...] block in asterisks.
+                const placeholderOnlyRegex = new RegExp(
+                    `^${this.protectedBlockPlaceholderPrefix}\\d+${this.protectedBlockPlaceholderSuffix}$`
+                );
+                if (placeholderOnlyRegex.test(section.text.trim())) {
+                    result += section.raw;
+                    continue;
+                }
+
+                // Use effectiveText (placeholders stripped from both ends) for all
+                // formatting checks so a leading Message# placeholder or trailing
+                // HTML placeholder doesn't mask existing asterisks.
+                const effectiveText = this.getEffectiveText(section.text);
+
+                if (!this.isItalicized(effectiveText)) {
+                    // Decompose section.text into [leadingPH][innerText][trailingPH] so
+                    // we can insert * AFTER any leading placeholder and BEFORE any trailing placeholder.
+                    const phPattern = `(?:${this.protectedBlockPlaceholderPrefix}\\d+${this.protectedBlockPlaceholderSuffix})`;
+                    const leadingPHMatch  = section.text.match(new RegExp(`^(?:${phPattern})+`));
+                    const trailingPHMatch = section.text.match(new RegExp(`(?:${phPattern})+$`));
+                    const leadingPH  = leadingPHMatch  ? leadingPHMatch[0]  : '';
+                    const trailingPH = trailingPHMatch ? trailingPHMatch[0] : '';
+                    const innerText  = section.text.slice(
+                        leadingPH.length,
+                        section.text.length - trailingPH.length
+                    );
+
+                    const needsLeadingStar  = !effectiveText.startsWith('*');
+                    const needsTrailingStar = !effectiveText.endsWith('*');
+
+                    if (needsLeadingStar && result && !result.endsWith(' ') && !result.endsWith('\n')) {
+                        result += ' ';
                     }
-                    
-                    result += section.text;
-                    
-                    // When adding end asterisk, also add space if needed
-                    if (!section.text.endsWith('*')) {
-                        result += '*';
-                        if (i < sections.length - 1 && !section.text.endsWith(' ') && sections[i + 1].type !== 'newline') result += ' ';
+
+                    result += leadingPH;
+                    if (needsLeadingStar)  result += '*';
+                    result += innerText;
+                    if (needsTrailingStar) result += '*';
+                    result += trailingPH;
+
+                    if (needsTrailingStar && i < sections.length - 1 && !effectiveText.endsWith(' ') && sections[i + 1].type !== 'newline') {
+                        result += ' ';
                     }
                 } else {
                     // Already properly emphasized - preserve original spacing
@@ -871,16 +1014,16 @@ class TextProcessor {
             const placeholderMatch = remainingText.match(placeholderRegex);
 
             if (placeholderMatch && placeholderMatch.index === 0) {
-                // Found a placeholder (either <think>, Message #, or square bracket)
+                // Found a placeholder. Add it directly to the buffer so it stays
+                // part of whichever narrative section surrounds it. This prevents
+                // mid-phrase splits that would break the surrounding italic context
+                // (e.g. *text <span>...</span> more text* would get extra asterisks
+                // if the placeholder were isolated as a separate code section).
+                // Standalone placeholders are handled in processNarrative below.
                 const placeholder = placeholderMatch[0];
-                pushBuffer(); // Push any content before the placeholder
-                sections.push({
-                    raw: placeholder,
-                    text: placeholder,
-                    type: 'code' // Mark as code to be ignored by processNarrative
-                });
+                buffer += placeholder;
                 i += placeholder.length - 1; // Move index past the placeholder
-                continue; // Continue to the next character after the placeholder
+                continue;
             }
 
             // Check for code blocks
@@ -1111,6 +1254,11 @@ jQuery(async () => {
                                 <option value="cyoa">CYOA Options</option>
                                 <option value="height_measurement">Height Measurement Protection</option>
                                 <option value="single_word_emphasis">Single Word Emphasis at Line Start</option>
+                                <option value="html_comment">HTML Comment Protection</option>
+                                <option value="html_inline">HTML Inline Element Protection</option>
+                                <option value="html_block">HTML Block Element Protection</option>
+                                <option value="html_void">HTML Void Element Protection</option>
+                                <option value="html_style">HTML Style Block Protection</option>
                                 <option value="custom">Custom Input</option>
                             </select>
                         </div>
